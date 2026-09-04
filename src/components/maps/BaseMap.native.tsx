@@ -14,6 +14,17 @@ import { DEFAULT_MAP_ZOOM } from '@/utils';
 
 import type { BaseMapProps } from './BaseMap.types';
 import {
+  FAIRWAY_HIT_LAYER_ID,
+  FAIRWAY_LAYER_ID,
+  FAIRWAY_SOURCE_ID,
+  MARKER_HIT_LAYER_ID,
+  MARKER_SOURCE_ID,
+  MARKER_SYMBOL_LAYER_ID,
+  fairwayColor,
+  fairwaysToGeoJson,
+  markersToGeoJson,
+} from './navigationLayer';
+import {
   BATHYMETRY_ATTRIBUTION,
   BATHYMETRY_BOUNDS,
   COASTAL_BATHYMETRY_TILE_URL,
@@ -141,6 +152,12 @@ export default function BaseMap({
   vessels,
   vesselsVisible,
   onVesselPress,
+  fairways,
+  fairwaysVisible,
+  markers,
+  markersVisible,
+  onFairwayPress,
+  onMarkerPress,
 }: BaseMapProps) {
   const cameraRef = useRef<ComponentRef<typeof Mapbox.Camera>>(null);
   const mapViewRef = useRef<ComponentRef<typeof Mapbox.MapView>>(null);
@@ -227,11 +244,32 @@ export default function BaseMap({
           await mapViewRef.current?.queryRenderedFeaturesAtPoint(
             [feature.properties.screenPointX, feature.properties.screenPointY],
             [],
-            [VESSEL_HIT_LAYER_ID, VESSEL_MARKER_LAYER_ID],
+            [
+              VESSEL_HIT_LAYER_ID,
+              VESSEL_MARKER_LAYER_ID,
+              MARKER_HIT_LAYER_ID,
+              MARKER_SYMBOL_LAYER_ID,
+              FAIRWAY_HIT_LAYER_ID,
+              FAIRWAY_LAYER_ID,
+            ],
           );
         const mmsi = vesselFeatures?.features[0]?.properties?.mmsi;
         if (typeof mmsi === 'string') {
           onVesselPress(mmsi);
+          return;
+        }
+        const featureProperties = vesselFeatures?.features[0]?.properties;
+        const markerId = featureProperties?.id;
+        if (
+          typeof markerId === 'string' &&
+          typeof featureProperties?.type === 'string'
+        ) {
+          onMarkerPress(markerId);
+          return;
+        }
+        const fairwayId = featureProperties?.id;
+        if (typeof fairwayId === 'string') {
+          onFairwayPress(fairwayId);
           return;
         }
 
@@ -365,6 +403,87 @@ export default function BaseMap({
         visible={windRenderingEnabled}
         zoom={zoom}
       />
+      <Mapbox.ShapeSource
+        id={FAIRWAY_SOURCE_ID}
+        shape={fairwaysToGeoJson(fairways)}
+      >
+        <Mapbox.LineLayer
+          id={FAIRWAY_HIT_LAYER_ID}
+          style={{
+            lineColor: '#075985',
+            lineOpacity: 0,
+            lineWidth: 14,
+            visibility: fairwaysVisible ? 'visible' : 'none',
+          }}
+        />
+        <Mapbox.LineLayer
+          id={FAIRWAY_LAYER_ID}
+          style={{
+            lineColor: fairwayColor('IV'),
+            lineOpacity: 0.86,
+            lineWidth: ['interpolate', ['linear'], ['zoom'], 5, 1.2, 14, 4],
+            visibility: fairwaysVisible ? 'visible' : 'none',
+          }}
+        />
+      </Mapbox.ShapeSource>
+      <Mapbox.ShapeSource
+        id={MARKER_SOURCE_ID}
+        shape={markersToGeoJson(markers)}
+      >
+        <Mapbox.CircleLayer
+          id={MARKER_HIT_LAYER_ID}
+          style={{
+            circleColor: [
+              'match',
+              ['get', 'color'],
+              'red',
+              '#dc2626',
+              'green',
+              '#16a34a',
+              'yellow',
+              '#facc15',
+              'black',
+              '#111827',
+              'white',
+              '#f8fafc',
+              'orange',
+              '#f97316',
+              '#94a3b8',
+            ],
+            circleOpacity: 0.25,
+            circleRadius: 13,
+            visibility: markersVisible ? 'visible' : 'none',
+          }}
+        />
+        <Mapbox.SymbolLayer
+          id={MARKER_SYMBOL_LAYER_ID}
+          style={{
+            textAllowOverlap: true,
+            textColor: [
+              'match',
+              ['get', 'color'],
+              'red',
+              '#dc2626',
+              'green',
+              '#16a34a',
+              'yellow',
+              '#ca8a04',
+              'black',
+              '#111827',
+              'white',
+              '#f8fafc',
+              'orange',
+              '#f97316',
+              '#64748b',
+            ],
+            textField: ['case', ['==', ['get', 'type'], 'buoy'], '●', '◆'],
+            textHaloColor: '#fff7ed',
+            textHaloWidth: 1.5,
+            textSize: 16,
+            visibility: markersVisible ? 'visible' : 'none',
+          }}
+        />
+      </Mapbox.ShapeSource>
       <Mapbox.ShapeSource
         id={VESSEL_SOURCE_ID}
         shape={vesselsToGeoJson(vessels)}

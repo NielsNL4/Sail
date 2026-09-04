@@ -17,6 +17,12 @@ export type {
 export type { Waypoint, WaypointCategory } from './Navigation';
 export type { DepthSample, DepthSampleSource, WaterProviderId } from './Depth';
 export type { DepthMode, MapStyleId, WindColorMode } from './Map';
+export type { CemtClass, FairwaySegment, NavigationQuery } from './Fairway';
+export type {
+  NavigationMarker,
+  NavigationMarkerType,
+} from './NavigationMarker';
+export type { BridgeLock } from './BridgeLock';
 export type {
   AISBoundingBox,
   AISConnectionStatus,

@@ -1,9 +1,11 @@
 import type {
   AISVessel,
+  FairwaySegment,
   Coordinates,
   DepthMode,
   LocationData,
   MapRegion,
+  NavigationMarker,
 } from '@/types';
 
 export interface BaseMapProps {
@@ -17,4 +19,10 @@ export interface BaseMapProps {
   vessels: AISVessel[];
   vesselsVisible: boolean;
   onVesselPress: (mmsi: string) => void;
+  fairways: FairwaySegment[];
+  fairwaysVisible: boolean;
+  markers: NavigationMarker[];
+  markersVisible: boolean;
+  onFairwayPress: (id: string) => void;
+  onMarkerPress: (id: string) => void;
 }

@@ -14,6 +14,7 @@ interface LayerDefinition {
   icon: React.ComponentProps<typeof Ionicons>['name'];
   label: string;
   available: boolean;
+  disabledReason?: string;
 }
 
 const layers: LayerDefinition[] = [
@@ -34,6 +35,25 @@ const layers: LayerDefinition[] = [
     icon: 'boat-outline',
     label: strings.vesselsLayer,
     available: true,
+  },
+  {
+    id: 'fairway',
+    icon: 'git-branch-outline',
+    label: strings.fairwayLayer,
+    available: true,
+  },
+  {
+    id: 'buoys',
+    icon: 'radio-button-on-outline',
+    label: strings.markersLayer,
+    available: true,
+  },
+  {
+    id: 'bridgesLocks',
+    icon: 'business-outline',
+    label: strings.bridgesLocksLayer,
+    available: false,
+    disabledReason: strings.bridgesLocksUnavailable,
   },
   {
     id: 'tides',
@@ -68,7 +88,9 @@ export function LayerMenu({ visibility, onToggle }: LayerMenuProps) {
               accessibilityLabel={
                 layer.available
                   ? layer.label
-                  : `${layer.label}: ${strings.layerComingSoon}`
+                  : `${layer.label}: ${
+                      layer.disabledReason ?? strings.layerComingSoon
+                    }`
               }
               accessibilityRole="button"
               accessibilityState={{ disabled: !layer.available, selected }}
@@ -97,7 +119,9 @@ export function LayerMenu({ visibility, onToggle }: LayerMenuProps) {
                 {layer.label}
               </Text>
               {!layer.available ? (
-                <Text style={styles.comingSoon}>{strings.layerSoonShort}</Text>
+                <Text style={styles.comingSoon}>
+                  {layer.disabledReason ?? strings.layerSoonShort}
+                </Text>
               ) : null}
             </Pressable>
           );

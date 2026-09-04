@@ -36,3 +36,20 @@ export {
   normalizeAISMessage,
   type AISService,
 } from './AISService';
+export {
+  createFairwayNetworkService,
+  fairwayNetworkService,
+  parseCemtClass,
+  type FairwayNetworkService,
+} from './FairwayNetworkService';
+export {
+  createNavigationMarkersService,
+  navigationMarkersService,
+  type NavigationMarkersService,
+} from './NavigationMarkersService';
+export {
+  bridgeLockService,
+  createBridgeLockService,
+  type BridgeLockProviderStatus,
+  type BridgeLockService,
+} from './BridgeLockService';

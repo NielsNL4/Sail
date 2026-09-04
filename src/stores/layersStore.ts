@@ -3,7 +3,15 @@ import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
 export type LayerId =
-  'wind' | 'depth' | 'vessels' | 'tides' | 'waypoints' | 'weatherWarnings';
+  | 'wind'
+  | 'depth'
+  | 'vessels'
+  | 'fairway'
+  | 'buoys'
+  | 'bridgesLocks'
+  | 'tides'
+  | 'waypoints'
+  | 'weatherWarnings';
 
 export type LayerVisibility = Record<LayerId, boolean>;
 
@@ -18,6 +26,9 @@ const defaultVisibility: LayerVisibility = {
   wind: true,
   depth: false,
   vessels: false,
+  fairway: false,
+  buoys: false,
+  bridgesLocks: false,
   tides: false,
   waypoints: false,
   weatherWarnings: true,

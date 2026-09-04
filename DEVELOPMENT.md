@@ -118,6 +118,15 @@ is not required for the current local development workflow.
   `bodemhoogte_20mtr` WMS from zoom 8 through 11 and switches exclusively to the
   February 2026 `bodemhoogte_1mtr_202602` snapshot from zoom 12. The dated 1 m
   layer must be updated when Rijkswaterstaat publishes a newer snapshot.
+- Vaargeulen use the CC0 PDOK OGC API Features collection `l_navigability`
+  from the RWS VNDS bevaarbaarheid service. The app requests the current
+  viewport, follows OGC `next` links, and colors segments by CEMT class.
+- Boeien and bakens use the CC0 PDOK OGC API Features collections
+  `vaarweg_markeringen_drijvend_rd` and `vaarweg_markeringen_vast_rd`. They are
+  normalized into one marker model while retaining the source type, object
+  color, and color pattern for map symbols and details. The map maps Dutch
+  source colors such as `Rood`, `Groen`, `Geel`, `Wit`, and `Zwart` to display
+  colors and uses a neutral fallback for unknown values.
 - WMS sources request and declare 512 px tiles. Raster fading is disabled so a
   stale parent tile cannot overlap the active resolution during zoom changes.
   Automatic viewport sampling, generated sounding labels, and persisted depth
@@ -160,3 +169,12 @@ request headers, tokens, URLs, or response payloads.
 - AIS vessel positions are never persisted. The stream disconnects and live
   vessels are cleared when the layer is disabled or connectivity is lost;
   reports not refreshed for 15 minutes expire from the in-memory store.
+- Fairways and navigation markers are persisted in AsyncStorage by viewport
+  cache key for seven days. Features remain available after a failed refresh;
+  offline mode prevents new requests and continues showing previously fetched
+  regions. Bridge/lock data is intentionally not included because no supported
+  public FIS or DISK API was confirmed.
+- `BridgeLockService` currently exposes an explicit unavailable provider state
+  and returns no records. This is intentional: an empty result is not treated
+  as proof that no bridges or locks exist. The disabled layer must remain so
+  until RWS confirms an official machine-readable FIS or DISK source.

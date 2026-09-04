@@ -111,6 +111,38 @@ Phase J implementation:
   five position reports within seconds. Native visual rendering remains
   unverified on this Linux development host.
 
+### Phase K — Confirmed RWS Navigation Layers
+
+Implement the confirmed PDOK navigation sources without guessing at the
+unconfirmed FIS/DISK bridge and lock feeds.
+
+Phase K implementation:
+
+- VNDS `l_navigability` fairway segments are loaded as paginated GeoJSON and
+  normalized with CEMT class, name, description, and geometry.
+- Floating and fixed PDOK navigation markers are loaded independently and
+  normalized with marker type, number, waterway, category, shape, color, and
+  light details where published.
+- Fairways and markers have independent persisted layer toggles and shared web
+  and native Mapbox overlays. Feature taps take priority over depth inspection.
+- Navigation features are cached by viewport key for seven days and remain
+  available offline after being fetched.
+- FIS/vaarweginformatie.nl has no confirmed documented JSON/OGC/WFS/API export;
+  DISK's current public endpoint and schema are also unconfirmed. No bridge or
+  lock records are fabricated, and Blauwe Golf Verbindend is excluded.
+- Automated and Expo Web verification is required before this phase is marked
+  complete. Native visual rendering remains unverified on Linux.
+
+### Step 2 — Bridge/Lock Provider Boundary
+
+- Added the provider-neutral `BridgeLockService` contract and explicit
+  `unavailable` status.
+- The layer menu communicates that no confirmed public FIS/DISK dataset is
+  available. No bridge/lock records are fabricated and no undocumented FIS
+  browser endpoint is scraped.
+- The service can be replaced with an official FIS or DISK adapter once RWS
+  provides a supported schema and access method.
+
 ## Definition of Done
 
 A feature is done when: it's implemented in TypeScript with no any escapes, it works in Expo Web (or has a documented, justified native-only exception), it has sensible error handling for API failures (never a blank/crashed screen), it uses cached data gracefully when offline, and UI text is in Dutch.

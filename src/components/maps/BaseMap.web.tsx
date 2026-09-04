@@ -11,6 +11,17 @@ import { DEFAULT_MAP_ZOOM } from '@/utils';
 
 import type { BaseMapProps } from './BaseMap.types';
 import {
+  FAIRWAY_HIT_LAYER_ID,
+  FAIRWAY_LAYER_ID,
+  FAIRWAY_SOURCE_ID,
+  MARKER_HIT_LAYER_ID,
+  MARKER_SOURCE_ID,
+  MARKER_SYMBOL_LAYER_ID,
+  fairwayColor,
+  fairwaysToGeoJson,
+  markersToGeoJson,
+} from './navigationLayer';
+import {
   BATHYMETRY_ATTRIBUTION,
   BATHYMETRY_BOUNDS,
   COASTAL_BATHYMETRY_TILE_URL,
@@ -68,6 +79,8 @@ function registerOverlaySlots(
   mapStyle: MapStyleId,
   colorMode: WindColorMode,
   vesselsVisible: boolean,
+  fairwaysVisible: boolean,
+  markersVisible: boolean,
 ) {
   if (!map.getSource(COASTAL_DEPTH_SOURCE_ID)) {
     map.addSource(COASTAL_DEPTH_SOURCE_ID, {
@@ -226,6 +239,124 @@ function registerOverlaySlots(
       },
     });
   }
+
+  if (!map.getSource(FAIRWAY_SOURCE_ID)) {
+    map.addSource(FAIRWAY_SOURCE_ID, {
+      type: 'geojson',
+      data: fairwaysToGeoJson([]),
+    });
+  }
+  if (!map.getLayer(FAIRWAY_HIT_LAYER_ID)) {
+    map.addLayer({
+      id: FAIRWAY_HIT_LAYER_ID,
+      type: 'line',
+      source: FAIRWAY_SOURCE_ID,
+      layout: { visibility: fairwaysVisible ? 'visible' : 'none' },
+      paint: { 'line-color': '#075985', 'line-opacity': 0, 'line-width': 12 },
+    });
+  }
+  if (!map.getLayer(FAIRWAY_LAYER_ID)) {
+    map.addLayer({
+      id: FAIRWAY_LAYER_ID,
+      type: 'line',
+      source: FAIRWAY_SOURCE_ID,
+      layout: { visibility: fairwaysVisible ? 'visible' : 'none' },
+      paint: {
+        'line-color': [
+          'match',
+          ['get', 'cemtClass'],
+          '0',
+          fairwayColor('0'),
+          'I',
+          fairwayColor('I'),
+          'II',
+          fairwayColor('II'),
+          'III',
+          fairwayColor('III'),
+          'IV',
+          fairwayColor('IV'),
+          'V',
+          fairwayColor('V'),
+          'VI',
+          fairwayColor('VI'),
+          'VIc',
+          fairwayColor('VIc'),
+          fairwayColor('unknown'),
+        ],
+        'line-opacity': 0.86,
+        'line-width': ['interpolate', ['linear'], ['zoom'], 5, 1.2, 14, 4],
+      },
+    });
+  }
+  if (!map.getSource(MARKER_SOURCE_ID)) {
+    map.addSource(MARKER_SOURCE_ID, {
+      type: 'geojson',
+      data: markersToGeoJson([]),
+    });
+  }
+  if (!map.getLayer(MARKER_HIT_LAYER_ID)) {
+    map.addLayer({
+      id: MARKER_HIT_LAYER_ID,
+      type: 'circle',
+      source: MARKER_SOURCE_ID,
+      layout: { visibility: markersVisible ? 'visible' : 'none' },
+      paint: {
+        'circle-color': [
+          'match',
+          ['get', 'color'],
+          'red',
+          '#dc2626',
+          'green',
+          '#16a34a',
+          'yellow',
+          '#facc15',
+          'black',
+          '#111827',
+          'white',
+          '#f8fafc',
+          'orange',
+          '#f97316',
+          '#94a3b8',
+        ],
+        'circle-opacity': 0.25,
+        'circle-radius': 13,
+      },
+    });
+  }
+  if (!map.getLayer(MARKER_SYMBOL_LAYER_ID)) {
+    map.addLayer({
+      id: MARKER_SYMBOL_LAYER_ID,
+      type: 'symbol',
+      source: MARKER_SOURCE_ID,
+      layout: {
+        visibility: markersVisible ? 'visible' : 'none',
+        'text-allow-overlap': true,
+        'text-field': ['case', ['==', ['get', 'type'], 'buoy'], '●', '◆'],
+        'text-size': 16,
+      },
+      paint: {
+        'text-color': [
+          'match',
+          ['get', 'color'],
+          'red',
+          '#dc2626',
+          'green',
+          '#16a34a',
+          'yellow',
+          '#ca8a04',
+          'black',
+          '#111827',
+          'white',
+          '#f8fafc',
+          'orange',
+          '#f97316',
+          '#64748b',
+        ],
+        'text-halo-color': '#fff7ed',
+        'text-halo-width': 1.5,
+      },
+    });
+  }
 }
 
 function setWindLayerVisibility(map: MapboxMap, visible: boolean) {
@@ -251,6 +382,12 @@ export default function BaseMap({
   vessels,
   vesselsVisible,
   onVesselPress,
+  fairways,
+  fairwaysVisible,
+  markers,
+  markersVisible,
+  onFairwayPress,
+  onMarkerPress,
 }: BaseMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapboxMap | null>(null);
@@ -269,6 +406,10 @@ export default function BaseMap({
   const windVisibleRef = useRef(useLayersStore.getState().visibility.wind);
   const vesselsVisibleRef = useRef(vesselsVisible);
   const vesselsRef = useRef(vessels);
+  const fairwaysRef = useRef(fairways);
+  const markersRef = useRef(markers);
+  const fairwaysVisibleRef = useRef(fairwaysVisible);
+  const markersVisibleRef = useRef(markersVisible);
   const mapRegion = useLocationStore((state) => state.mapRegion);
   const setMapRegion = useLocationStore((state) => state.setMapRegion);
   const setMapZoom = useLocationStore((state) => state.setMapZoom);
@@ -305,6 +446,12 @@ export default function BaseMap({
   );
   const handleVesselPress = useEffectEvent((mmsi: string) => {
     onVesselPress(mmsi);
+  });
+  const handleFairwayPress = useEffectEvent((id: string) => {
+    onFairwayPress(id);
+  });
+  const handleMarkerPress = useEffectEvent((id: string) => {
+    onMarkerPress(id);
   });
 
   useEffect(() => {
@@ -352,10 +499,18 @@ export default function BaseMap({
         useSettingsStore.getState().mapStyle,
         useSettingsStore.getState().windColorMode,
         vesselsVisibleRef.current,
+        fairwaysVisibleRef.current,
+        markersVisibleRef.current,
       );
       const vesselSource = map.getSource(VESSEL_SOURCE_ID) as
         GeoJSONSource | undefined;
       vesselSource?.setData(vesselsToGeoJson(vesselsRef.current));
+      (map.getSource(FAIRWAY_SOURCE_ID) as GeoJSONSource | undefined)?.setData(
+        fairwaysToGeoJson(fairwaysRef.current),
+      );
+      (map.getSource(MARKER_SOURCE_ID) as GeoJSONSource | undefined)?.setData(
+        markersToGeoJson(markersRef.current),
+      );
       setStyleReady(true);
     });
     map.on('moveend', () => {
@@ -382,6 +537,22 @@ export default function BaseMap({
         handleVesselPress(mmsi);
         return;
       }
+      const markerFeature = map.queryRenderedFeatures(event.point, {
+        layers: [MARKER_HIT_LAYER_ID, MARKER_SYMBOL_LAYER_ID],
+      })[0];
+      const markerId = markerFeature?.properties?.id;
+      if (typeof markerId === 'string') {
+        handleMarkerPress(markerId);
+        return;
+      }
+      const fairwayFeature = map.queryRenderedFeatures(event.point, {
+        layers: [FAIRWAY_HIT_LAYER_ID, FAIRWAY_LAYER_ID],
+      })[0];
+      const fairwayId = fairwayFeature?.properties?.id;
+      if (typeof fairwayId === 'string') {
+        handleFairwayPress(fairwayId);
+        return;
+      }
       handleDepthPress(
         { latitude: event.lngLat.lat, longitude: event.lngLat.lng },
         map.getZoom(),
@@ -396,6 +567,54 @@ export default function BaseMap({
       map.remove();
     };
   }, [initialRegion, initialViewport, initialZoom, setMapRegion, setMapZoom]);
+
+  useEffect(() => {
+    fairwaysVisibleRef.current = fairwaysVisible;
+  }, [fairwaysVisible]);
+
+  useEffect(() => {
+    markersVisibleRef.current = markersVisible;
+  }, [markersVisible]);
+
+  useEffect(() => {
+    fairwaysRef.current = fairways;
+    (
+      mapRef.current?.getSource(FAIRWAY_SOURCE_ID) as GeoJSONSource | undefined
+    )?.setData(fairwaysToGeoJson(fairways));
+  }, [fairways, styleReady]);
+
+  useEffect(() => {
+    markersRef.current = markers;
+    (
+      mapRef.current?.getSource(MARKER_SOURCE_ID) as GeoJSONSource | undefined
+    )?.setData(markersToGeoJson(markers));
+  }, [markers, styleReady]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map?.isStyleLoaded()) return;
+    for (const layerId of [FAIRWAY_HIT_LAYER_ID, FAIRWAY_LAYER_ID]) {
+      if (map.getLayer(layerId))
+        map.setLayoutProperty(
+          layerId,
+          'visibility',
+          fairwaysVisible ? 'visible' : 'none',
+        );
+    }
+  }, [fairwaysVisible, styleReady]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map?.isStyleLoaded()) return;
+    for (const layerId of [MARKER_HIT_LAYER_ID, MARKER_SYMBOL_LAYER_ID]) {
+      if (map.getLayer(layerId))
+        map.setLayoutProperty(
+          layerId,
+          'visibility',
+          markersVisible ? 'visible' : 'none',
+        );
+    }
+  }, [markersVisible, styleReady]);
 
   useEffect(() => {
     vesselsRef.current = vessels;

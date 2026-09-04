@@ -21,6 +21,7 @@ import {
 import {
   useDepthInspection,
   useAIS,
+  useNavigationData,
   useLocation,
   useNetworkStatus,
   useWeather,
@@ -30,6 +31,7 @@ import { strings } from '@/i18n';
 import {
   useLayersStore,
   useAISStore,
+  useNavigationStore,
   useLocationStore,
   useSettingsStore,
   useWindFieldStore,
@@ -83,6 +85,8 @@ export function MapScreen() {
   const depthVisible = useLayersStore((state) => state.visibility.depth);
   const windVisible = useLayersStore((state) => state.visibility.wind);
   const vesselsVisible = useLayersStore((state) => state.visibility.vessels);
+  const fairwaysVisible = useLayersStore((state) => state.visibility.fairway);
+  const markersVisible = useLayersStore((state) => state.visibility.buoys);
   const layerVisibility = useLayersStore((state) => state.visibility);
   const toggleLayer = useLayersStore((state) => state.toggleLayer);
   const windSpeedUnit = useSettingsStore((state) => state.windSpeedUnit);
@@ -101,9 +105,17 @@ export function MapScreen() {
   const vesselsByMmsi = useAISStore((state) => state.vessels);
   const aisStatus = useAISStore((state) => state.connectionStatus);
   const aisError = useAISStore((state) => state.error);
+  const fairwaysById = useNavigationStore((state) => state.fairways);
+  const markersById = useNavigationStore((state) => state.markers);
+  const fairwayError = useNavigationStore((state) => state.errors.fairways);
+  const markersError = useNavigationStore((state) => state.errors.markers);
   const [selectedVesselMmsi, setSelectedVesselMmsi] = useState<string | null>(
     null,
   );
+  const [selectedFairwayId, setSelectedFairwayId] = useState<string | null>(
+    null,
+  );
+  const [selectedMarkerId, setSelectedMarkerId] = useState<string | null>(null);
   const {
     location,
     permissionStatus,
@@ -143,9 +155,29 @@ export function MapScreen() {
     : false;
   const activeMapRegion = mapRegion ?? DUTCH_WATERS_REGION;
   useAIS(activeMapRegion, vesselsVisible && !isOffline);
+  const { loading: fairwaysLoading } = useNavigationData(
+    activeMapRegion,
+    'fairways',
+    fairwaysVisible,
+    !isOffline,
+  );
+  const { loading: markersLoading } = useNavigationData(
+    activeMapRegion,
+    'markers',
+    markersVisible,
+    !isOffline,
+  );
+  const fairways = Object.values(fairwaysById);
+  const markers = Object.values(markersById);
   const vessels = Object.values(vesselsByMmsi);
   const selectedVessel = selectedVesselMmsi
     ? (vesselsByMmsi[selectedVesselMmsi] ?? null)
+    : null;
+  const selectedFairway = selectedFairwayId
+    ? (fairways.find((fairway) => fairway.id === selectedFairwayId) ?? null)
+    : null;
+  const selectedMarker = selectedMarkerId
+    ? (markers.find((marker) => marker.id === selectedMarkerId) ?? null)
     : null;
   const windFieldAvailableOffline = Boolean(
     windField && windFieldContainsRegion(windField, activeMapRegion),
@@ -189,6 +221,12 @@ export function MapScreen() {
         onVesselPress={setSelectedVesselMmsi}
         vessels={vessels}
         vesselsVisible={vesselsVisible}
+        fairways={fairways}
+        fairwaysVisible={fairwaysVisible}
+        markers={markers}
+        markersVisible={markersVisible}
+        onFairwayPress={setSelectedFairwayId}
+        onMarkerPress={setSelectedMarkerId}
       />
 
       <ScrollView
@@ -210,6 +248,12 @@ export function MapScreen() {
             }
             if (layer === 'vessels' && vesselsVisible) {
               setSelectedVesselMmsi(null);
+            }
+            if (layer === 'fairway' && fairwaysVisible) {
+              setSelectedFairwayId(null);
+            }
+            if (layer === 'buoys' && markersVisible) {
+              setSelectedMarkerId(null);
             }
             toggleLayer(layer);
           }}
@@ -254,6 +298,86 @@ export function MapScreen() {
                 {shipTypeLabel(selectedVessel.shipType) ? (
                   <Text style={styles.vesselMeta}>
                     {strings.aisType(shipTypeLabel(selectedVessel.shipType)!)}
+                  </Text>
+                ) : null}
+              </View>
+            ) : null}
+          </View>
+        ) : null}
+
+        {fairwaysVisible ? (
+          <View style={styles.navigationPanel}>
+            <Text style={styles.navigationStatus}>
+              {fairwayError ??
+                (fairwaysLoading
+                  ? strings.fairwaysLoading
+                  : fairways.length > 0
+                    ? `${fairways.length} vaarwegsegmenten`
+                    : strings.fairwaysNoData)}
+            </Text>
+            {selectedFairway ? (
+              <View style={styles.navigationDetails}>
+                <Text style={styles.navigationName}>
+                  {selectedFairway.name ?? strings.fairwayUnknown}
+                </Text>
+                <Text style={styles.navigationMeta}>
+                  {selectedFairway.cemtClass === 'unknown'
+                    ? strings.fairwayUnknown
+                    : strings.fairwayClass(selectedFairway.cemtClass)}
+                </Text>
+                {selectedFairway.description ? (
+                  <Text style={styles.navigationMeta}>
+                    {selectedFairway.description}
+                  </Text>
+                ) : null}
+              </View>
+            ) : null}
+          </View>
+        ) : null}
+
+        {markersVisible ? (
+          <View style={styles.navigationPanel}>
+            <Text style={styles.navigationStatus}>
+              {markersError ??
+                (markersLoading
+                  ? strings.markersLoading
+                  : markers.length > 0
+                    ? `${markers.length} boeien en bakens`
+                    : strings.markersNoData)}
+            </Text>
+            {selectedMarker ? (
+              <View style={styles.navigationDetails}>
+                <Text style={styles.navigationName}>
+                  {selectedMarker.name ?? strings.markerUnknown}
+                </Text>
+                <Text style={styles.navigationMeta}>
+                  {strings.markerType(
+                    selectedMarker.type === 'buoy' ? 'boei' : 'baken',
+                  )}
+                </Text>
+                {selectedMarker.number ? (
+                  <Text style={styles.navigationMeta}>
+                    {strings.markerNumber(selectedMarker.number)}
+                  </Text>
+                ) : null}
+                {selectedMarker.waterway ? (
+                  <Text style={styles.navigationMeta}>
+                    {strings.markerWaterway(selectedMarker.waterway)}
+                  </Text>
+                ) : null}
+                {selectedMarker.description ? (
+                  <Text style={styles.navigationMeta}>
+                    {strings.markerDescription(selectedMarker.description)}
+                  </Text>
+                ) : null}
+                {selectedMarker.color ? (
+                  <Text style={styles.navigationMeta}>
+                    {strings.markerColor(selectedMarker.color)}
+                  </Text>
+                ) : null}
+                {selectedMarker.colorPattern ? (
+                  <Text style={styles.navigationMeta}>
+                    {strings.markerColorPattern(selectedMarker.colorPattern)}
                   </Text>
                 ) : null}
               </View>
@@ -607,6 +731,34 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   vesselMeta: {
+    color: '#334155',
+    fontSize: 10,
+    lineHeight: 14,
+  },
+  navigationPanel: {
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderTopWidth: 1,
+    borderTopColor: '#bae6fd',
+  },
+  navigationStatus: {
+    color: '#075985',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  navigationDetails: {
+    gap: 2,
+    marginTop: 7,
+    padding: 8,
+    borderRadius: 9,
+    backgroundColor: '#e0f2fe',
+  },
+  navigationName: {
+    color: '#082f49',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  navigationMeta: {
     color: '#334155',
     fontSize: 10,
     lineHeight: 14,
