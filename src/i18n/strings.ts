@@ -30,6 +30,7 @@ export const strings = {
   fairwaysLoading: 'Vaargeulen laden...',
   fairwaysNoData: 'Geen vaargeulen in dit kaartgebied',
   markersLoading: 'Boeien en bakens laden...',
+  markersZoomIn: 'Zoom verder in om boeien en bakens te laden.',
   markersNoData: 'Geen boeien of bakens in dit kaartgebied',
   navigationCached: 'Offline · eerder geladen navigatiedata',
   navigationStale: 'Verouderde navigatiedata',

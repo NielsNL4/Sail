@@ -15,6 +15,7 @@ const region = {
 describe('FairwayNetworkService', () => {
   it('parses CEMT classes from VNDS codes and descriptions', () => {
     expect(parseCemtClass('_0', 'Kleine vaartuigen')).toBe('0');
+    expect(parseCemtClass('V_A', 'Groot Rijnschip')).toBe('V');
     expect(parseCemtClass('VIc', null)).toBe('VIc');
     expect(parseCemtClass('unknown', 'Recreatie')).toBe('unknown');
   });

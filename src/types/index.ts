@@ -23,6 +23,7 @@ export type {
   NavigationMarkerType,
 } from './NavigationMarker';
 export type { BridgeLock } from './BridgeLock';
+export type { VesselProfile } from './VesselProfile';
 export type {
   AISBoundingBox,
   AISConnectionStatus,

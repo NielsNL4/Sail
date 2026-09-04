@@ -1,4 +1,6 @@
 import process from 'node:process';
+import { Buffer } from 'node:buffer';
+import { createServer } from 'node:http';
 
 import WebSocket, { WebSocketServer } from 'ws';
 
@@ -14,6 +16,8 @@ const apiKey = process.env.AISSTREAM_API_KEY;
 const port = Number(process.env.AIS_RELAY_PORT ?? 8790);
 const host = process.env.AIS_RELAY_HOST ?? '127.0.0.1';
 const maximumClients = Number(process.env.AIS_RELAY_MAX_CLIENTS ?? 10);
+const ndwUrl = 'https://opendata.ndw.nu/planningsfeed_brugopeningen.xml.gz';
+const ndwCacheTtl = 3 * 60 * 1_000;
 
 if (!apiKey) {
   console.error('AISSTREAM_API_KEY is required.');
@@ -22,7 +26,11 @@ if (!apiKey) {
 
 const clients = new Map();
 const connectedClients = new Set();
-const server = new WebSocketServer({ host, port, maxPayload: 16 * 1024 });
+const httpServer = createServer();
+const server = new WebSocketServer({ noServer: true, maxPayload: 16 * 1024 });
+let ndwCache = null;
+let ndwFetchedAt = 0;
+let ndwRequest = null;
 let upstream = null;
 let reconnectTimer = null;
 let subscriptionTimer = null;
@@ -194,11 +202,97 @@ function connectUpstream() {
   });
 }
 
-server.on('listening', () => {
-  console.log(`AIS relay listening on ws://${host}:${port}`);
+async function ndwFeed() {
+  if (ndwCache && Date.now() - ndwFetchedAt < ndwCacheTtl) {
+    return ndwCache;
+  }
+  if (!ndwRequest) {
+    ndwRequest = fetch(ndwUrl)
+      .then((response) => {
+        if (!response.ok) throw new Error(`NDW HTTP ${response.status}`);
+        return response.arrayBuffer();
+      })
+      .then((body) => {
+        ndwCache = Buffer.from(body);
+        ndwFetchedAt = Date.now();
+        return ndwCache;
+      })
+      .finally(() => {
+        ndwRequest = null;
+      });
+  }
+  return ndwRequest;
+}
+
+function writeCors(response, origin) {
+  response.setHeader('Access-Control-Allow-Origin', origin || '*');
+  response.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  response.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  if (origin) response.setHeader('Vary', 'Origin');
+}
+
+httpServer.on('request', async (request, response) => {
+  const origin = request.headers.origin;
+  if (origin && !originAllowed(origin)) {
+    response.writeHead(403);
+    response.end('Origin not allowed');
+    return;
+  }
+  if (
+    request.method === 'OPTIONS' &&
+    request.url === '/ndw/bridge-openings.xml.gz'
+  ) {
+    writeCors(response, origin);
+    response.writeHead(204);
+    response.end();
+    return;
+  }
+  if (
+    request.method !== 'GET' ||
+    request.url !== '/ndw/bridge-openings.xml.gz'
+  ) {
+    response.writeHead(404);
+    response.end('Not found');
+    return;
+  }
+  try {
+    const body = await ndwFeed();
+    writeCors(response, origin);
+    response.setHeader('Content-Type', 'application/gzip');
+    response.setHeader(
+      'Cache-Control',
+      `public, max-age=${ndwCacheTtl / 1_000}`,
+    );
+    response.writeHead(200);
+    response.end(body);
+  } catch (error) {
+    console.error(`NDW relay error: ${error.message}`);
+    writeCors(response, origin);
+    response.writeHead(502);
+    response.end('NDW feed temporarily unavailable');
+  }
 });
 
-server.on('error', (error) => {
+httpServer.on('upgrade', (request, socket, head) => {
+  if (!originAllowed(request.headers.origin)) {
+    socket.destroy();
+    return;
+  }
+  server.handleUpgrade(request, socket, head, (client) => {
+    server.emit('connection', client, request);
+  });
+});
+
+httpServer.listen(port, host);
+
+httpServer.on('listening', () => {
+  console.log(`AIS relay listening on ws://${host}:${port}`);
+  console.log(
+    `NDW relay listening on http://${host}:${port}/ndw/bridge-openings.xml.gz`,
+  );
+});
+
+httpServer.on('error', (error) => {
   if (error.code === 'EADDRINUSE') {
     console.error(`AIS relay port ${port} is already in use.`);
   } else {

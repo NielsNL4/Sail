@@ -52,8 +52,7 @@ const layers: LayerDefinition[] = [
     id: 'bridgesLocks',
     icon: 'business-outline',
     label: strings.bridgesLocksLayer,
-    available: false,
-    disabledReason: strings.bridgesLocksUnavailable,
+    available: true,
   },
   {
     id: 'tides',

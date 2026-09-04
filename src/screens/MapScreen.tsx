@@ -1,5 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Linking,
@@ -36,7 +36,8 @@ import {
   useSettingsStore,
   useWindFieldStore,
 } from '@/stores';
-import type { DepthMode, MapStyleId, WindColorMode } from '@/types';
+import { bridgeLockService } from '@/services/BridgeLockService';
+import type { BridgeLock, DepthMode, MapStyleId, WindColorMode } from '@/types';
 import {
   directionToCompass,
   DUTCH_WATERS_REGION,
@@ -44,6 +45,7 @@ import {
   formatTemperature,
   formatWindSpeed,
   isTimestampStale,
+  MIN_MARKER_ZOOM,
   shipTypeLabel,
   WEATHER_FRESHNESS_MS,
 } from '@/utils';
@@ -87,6 +89,9 @@ export function MapScreen() {
   const vesselsVisible = useLayersStore((state) => state.visibility.vessels);
   const fairwaysVisible = useLayersStore((state) => state.visibility.fairway);
   const markersVisible = useLayersStore((state) => state.visibility.buoys);
+  const bridgesVisible = useLayersStore(
+    (state) => state.visibility.bridgesLocks,
+  );
   const layerVisibility = useLayersStore((state) => state.visibility);
   const toggleLayer = useLayersStore((state) => state.toggleLayer);
   const windSpeedUnit = useSettingsStore((state) => state.windSpeedUnit);
@@ -96,6 +101,7 @@ export function MapScreen() {
   const windColorMode = useSettingsStore((state) => state.windColorMode);
   const setWindColorMode = useSettingsStore((state) => state.setWindColorMode);
   const depthMode = useSettingsStore((state) => state.depthMode);
+  const vesselProfile = useSettingsStore((state) => state.vesselProfile);
   const setDepthMode = useSettingsStore((state) => state.setDepthMode);
   const mapRegion = useLocationStore((state) => state.mapRegion);
   const mapZoom = useLocationStore((state) => state.mapZoom);
@@ -116,6 +122,9 @@ export function MapScreen() {
     null,
   );
   const [selectedMarkerId, setSelectedMarkerId] = useState<string | null>(null);
+  const [selectedBridgeId, setSelectedBridgeId] = useState<string | null>(null);
+  const [bridges, setBridges] = useState<BridgeLock[]>([]);
+  const [bridgeError, setBridgeError] = useState<string | null>(null);
   const {
     location,
     permissionStatus,
@@ -141,6 +150,7 @@ export function MapScreen() {
     : null;
   const effectiveMapZoom =
     mapZoom ?? regionToZoom(mapRegion ?? DUTCH_WATERS_REGION);
+  const markersAvailableAtZoom = effectiveMapZoom >= MIN_MARKER_ZOOM;
   const windAnimationAvailable = shouldRenderWindParticles(effectiveMapZoom);
   const {
     selectedSample,
@@ -155,6 +165,29 @@ export function MapScreen() {
     : false;
   const activeMapRegion = mapRegion ?? DUTCH_WATERS_REGION;
   useAIS(activeMapRegion, vesselsVisible && !isOffline);
+  useEffect(() => {
+    if (!bridgesVisible || isOffline) return;
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const nextBridges = await bridgeLockService.getStructures({
+          region: activeMapRegion,
+        });
+        if (!cancelled) {
+          setBridges(nextBridges);
+          setBridgeError(null);
+        }
+      } catch {
+        if (!cancelled) setBridgeError(bridgeLockService.unavailableReason);
+      }
+    };
+    void load();
+    const interval = setInterval(() => void load(), 180_000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [activeMapRegion, bridgesVisible, isOffline]);
   const { loading: fairwaysLoading } = useNavigationData(
     activeMapRegion,
     'fairways',
@@ -164,7 +197,7 @@ export function MapScreen() {
   const { loading: markersLoading } = useNavigationData(
     activeMapRegion,
     'markers',
-    markersVisible,
+    markersVisible && markersAvailableAtZoom,
     !isOffline,
   );
   const fairways = Object.values(fairwaysById);
@@ -178,6 +211,9 @@ export function MapScreen() {
     : null;
   const selectedMarker = selectedMarkerId
     ? (markers.find((marker) => marker.id === selectedMarkerId) ?? null)
+    : null;
+  const selectedBridge = selectedBridgeId
+    ? (bridges.find((bridge) => bridge.id === selectedBridgeId) ?? null)
     : null;
   const windFieldAvailableOffline = Boolean(
     windField && windFieldContainsRegion(windField, activeMapRegion),
@@ -224,9 +260,13 @@ export function MapScreen() {
         fairways={fairways}
         fairwaysVisible={fairwaysVisible}
         markers={markers}
-        markersVisible={markersVisible}
+        markersVisible={markersVisible && markersAvailableAtZoom}
         onFairwayPress={setSelectedFairwayId}
         onMarkerPress={setSelectedMarkerId}
+        bridges={bridges}
+        bridgesVisible={bridgesVisible}
+        onBridgePress={setSelectedBridgeId}
+        vesselProfile={vesselProfile}
       />
 
       <ScrollView
@@ -254,6 +294,9 @@ export function MapScreen() {
             }
             if (layer === 'buoys' && markersVisible) {
               setSelectedMarkerId(null);
+            }
+            if (layer === 'bridgesLocks' && bridgesVisible) {
+              setSelectedBridgeId(null);
             }
             toggleLayer(layer);
           }}
@@ -338,12 +381,14 @@ export function MapScreen() {
         {markersVisible ? (
           <View style={styles.navigationPanel}>
             <Text style={styles.navigationStatus}>
-              {markersError ??
-                (markersLoading
-                  ? strings.markersLoading
-                  : markers.length > 0
-                    ? `${markers.length} boeien en bakens`
-                    : strings.markersNoData)}
+              {!markersAvailableAtZoom
+                ? strings.markersZoomIn
+                : (markersError ??
+                  (markersLoading
+                    ? strings.markersLoading
+                    : markers.length > 0
+                      ? `${markers.length} boeien en bakens`
+                      : strings.markersNoData))}
             </Text>
             {selectedMarker ? (
               <View style={styles.navigationDetails}>
@@ -380,6 +425,24 @@ export function MapScreen() {
                     {strings.markerColorPattern(selectedMarker.colorPattern)}
                   </Text>
                 ) : null}
+              </View>
+            ) : null}
+          </View>
+        ) : null}
+
+        {bridgesVisible ? (
+          <View style={styles.navigationPanel}>
+            <Text style={styles.navigationStatus}>
+              {bridgeError ?? `${bridges.length} bruggen in dit kaartgebied`}
+            </Text>
+            {selectedBridge ? (
+              <View style={styles.navigationDetails}>
+                <Text style={styles.navigationName}>{selectedBridge.name}</Text>
+                <Text style={styles.navigationMeta}>
+                  {selectedBridge.liveStatus === 'open'
+                    ? 'Live open'
+                    : 'Live status onbekend'}
+                </Text>
               </View>
             ) : null}
           </View>

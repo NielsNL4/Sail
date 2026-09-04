@@ -1,11 +1,13 @@
 import type {
   AISVessel,
+  BridgeLock,
   FairwaySegment,
   Coordinates,
   DepthMode,
   LocationData,
   MapRegion,
   NavigationMarker,
+  VesselProfile,
 } from '@/types';
 
 export interface BaseMapProps {
@@ -25,4 +27,8 @@ export interface BaseMapProps {
   markersVisible: boolean;
   onFairwayPress: (id: string) => void;
   onMarkerPress: (id: string) => void;
+  vesselProfile: VesselProfile;
+  bridges: BridgeLock[];
+  bridgesVisible: boolean;
+  onBridgePress: (id: string) => void;
 }

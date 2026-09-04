@@ -28,6 +28,15 @@ module.exports = {
     predictiveBackGestureEnabled: false,
   },
   web: {
+    output: 'single',
+    name: 'Sail',
+    shortName: 'Sail',
+    lang: 'nl',
+    display: 'standalone',
+    startUrl: '/',
+    orientation: 'portrait',
+    themeColor: '#082f49',
+    backgroundColor: '#f8fafc',
     favicon: './assets/favicon.png',
   },
   plugins: [

@@ -16,6 +16,8 @@ AIS_RELAY_HOST=127.0.0.1
 AIS_RELAY_PORT=8790
 AIS_RELAY_ALLOWED_ORIGINS=http://localhost:8081
 EXPO_PUBLIC_AIS_RELAY_URL=ws://localhost:8790
+EXPO_PUBLIC_NDW_RELAY_URL=http://localhost:8790
+EXPO_PUBLIC_MIN_MARKER_ZOOM=11
 ```
 
 Generate both tokens at https://console.mapbox.com/account/access-tokens/.
@@ -37,6 +39,11 @@ Generate both tokens at https://console.mapbox.com/account/access-tokens/.
 - `AIS_RELAY_ALLOWED_ORIGINS` is a comma-separated allowlist for browser
   origins. Localhost origins are accepted by default; set this explicitly when
   serving Expo Web from another host.
+- `EXPO_PUBLIC_NDW_RELAY_URL` is the HTTP base URL for the NDW bridge feed. It
+  uses the same local relay as AIS and must use the development machine's LAN
+  address for a physical device.
+- `EXPO_PUBLIC_MIN_MARKER_ZOOM` controls when buoys and beacons are loaded and
+  displayed. It defaults to `11` when omitted or invalid.
 
 `app.config.js` maps `MAPBOX_DOWNLOADS_TOKEN` to the environment variable name
 expected by the current `@rnmapbox/maps` native installer. The secret is not
@@ -59,11 +66,42 @@ npm run web
 
 Open the URL printed by Expo, normally http://localhost:8081.
 
+### Deploying to laptop and mobile
+
+The web build is the shared version for desktop, iOS, and Android browsers. It
+does not use the native `@rnmapbox/maps` module, so it can be used without a
+Mac, Apple Developer account, or EAS Build.
+
+Set `EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN` in the deployment provider's environment
+variables, then create the production files with:
+
+```sh
+npm run build:web
+```
+
+Deploy the generated `dist/` directory to any static HTTPS host such as
+Netlify, Vercel, Cloudflare Pages, or GitHub Pages. Configure the host to
+serve `index.html` as the fallback for unknown routes. Expo's web output is a
+single-page application, so this fallback is required even though the current
+app has no client-side routes.
+
+Open the resulting HTTPS URL on the laptop, iPhone, and Android device. On
+iPhone use Safari's Share menu and choose **Add to Home Screen**. On Android,
+use the browser menu and choose **Install app** or **Add to Home screen**.
+
+For local testing on a physical device, use the LAN URL printed by Expo rather
+than `localhost`; the phone must be on the same network as the development
+computer. The AIS and NDW relay URLs must also use the computer's LAN address,
+as described in the environment section below.
+
 Start the AIS relay in another terminal before enabling `Andere schepen`:
 
 ```sh
 npm run ais-relay
 ```
+
+The same relay exposes the CORS-enabled NDW bridge feed used by the bridge
+layer. This avoids direct browser requests to the NDW host.
 
 The relay maintains one upstream AISStream connection, combines active client
 viewports into the provider subscription, and forwards each report only to

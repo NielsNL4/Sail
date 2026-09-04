@@ -22,12 +22,16 @@ function stringValue(value: unknown): string | null {
 }
 
 export function parseCemtClass(code: unknown, description: unknown): CemtClass {
-  const source =
-    `${typeof code === 'string' ? code : ''} ${typeof description === 'string' ? description : ''}`.toUpperCase();
-  const match = source.match(
-    /(?:^|[^A-Z])VI[C]?|(?:^|[^A-Z])[0-5](?:\D|$)|\bI{1,3}\b/,
+  const codeSource = typeof code === 'string' ? code.toUpperCase() : '';
+  const descriptionSource =
+    typeof description === 'string' ? description.toUpperCase() : '';
+  const codeMatch = codeSource.match(
+    /^(?:_|\s)*(VIC|VI|V|IV|III|II|I|0)(?:_|\s|$)/,
   );
-  const value = match?.[0]?.trim().replace(/[^IV0-9C]/g, '') ?? '';
+  const descriptionMatch = descriptionSource.match(
+    /\b(VIC|VI|V|IV|III|II|I|0)\b/,
+  );
+  const value = codeMatch?.[1] ?? descriptionMatch?.[1] ?? '';
   if (value === 'VIC') return 'VIc';
   if (['VI', 'V', 'IV', 'III', 'II', 'I', '0'].includes(value))
     return value as CemtClass;

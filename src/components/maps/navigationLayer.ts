@@ -1,4 +1,10 @@
-import type { FairwaySegment, NavigationMarker } from '@/types';
+import type {
+  BridgeLock,
+  FairwaySegment,
+  NavigationMarker,
+  VesselProfile,
+} from '@/types';
+import { fairwayIsUnsuitable } from '../../utils/vesselSuitability';
 
 export const FAIRWAY_SOURCE_ID = 'rws-fairways-source';
 export const FAIRWAY_LAYER_ID = 'rws-fairways-line';
@@ -6,12 +12,40 @@ export const FAIRWAY_HIT_LAYER_ID = 'rws-fairways-hit';
 export const MARKER_SOURCE_ID = 'rws-navigation-markers-source';
 export const MARKER_HIT_LAYER_ID = 'rws-navigation-markers-hit';
 export const MARKER_SYMBOL_LAYER_ID = 'rws-navigation-markers-symbol';
+export const BRIDGE_SOURCE_ID = 'ndw-bridge-status-source';
+export const BRIDGE_HIT_LAYER_ID = 'ndw-bridge-status-hit';
+export const BRIDGE_SYMBOL_LAYER_ID = 'ndw-bridge-status-symbol';
+
+export function bridgesToGeoJson(
+  bridges: BridgeLock[],
+): GeoJSON.FeatureCollection<
+  GeoJSON.Point,
+  { id: string; kind: BridgeLock['kind']; liveStatus: BridgeLock['liveStatus'] }
+> {
+  return {
+    type: 'FeatureCollection',
+    features: bridges.map((bridge) => ({
+      type: 'Feature',
+      id: bridge.id,
+      geometry: {
+        type: 'Point',
+        coordinates: [bridge.position.longitude, bridge.position.latitude],
+      },
+      properties: {
+        id: bridge.id,
+        kind: bridge.kind,
+        liveStatus: bridge.liveStatus,
+      },
+    })),
+  };
+}
 
 export function fairwaysToGeoJson(
   fairways: FairwaySegment[],
+  vesselProfile?: VesselProfile,
 ): GeoJSON.FeatureCollection<
   GeoJSON.MultiLineString,
-  { id: string; cemtClass: string }
+  { id: string; cemtClass: string; unsuitable: boolean }
 > {
   return {
     type: 'FeatureCollection',
@@ -19,7 +53,13 @@ export function fairwaysToGeoJson(
       type: 'Feature',
       id: fairway.id,
       geometry: fairway.geometry,
-      properties: { id: fairway.id, cemtClass: fairway.cemtClass },
+      properties: {
+        id: fairway.id,
+        cemtClass: fairway.cemtClass,
+        unsuitable: vesselProfile
+          ? fairwayIsUnsuitable(fairway, vesselProfile)
+          : false,
+      },
     })),
   };
 }

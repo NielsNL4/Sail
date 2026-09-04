@@ -8,6 +8,7 @@ export {
   DEFAULT_MAP_ZOOM,
   DEPTH_DETAIL_ZOOM,
   DUTCH_WATERS_REGION,
+  MIN_MARKER_ZOOM,
 } from './constants';
 export {
   directionToCompass,
@@ -16,3 +17,5 @@ export {
 } from './weather';
 export { logApiError } from './logger';
 export { regionToAISBoundingBox, shipTypeLabel } from './vessels';
+export { feetToMeters, metersToFeet } from './vesselUnits';
+export { fairwayIsUnsuitable, vesselProfileIsEmpty } from './vesselSuitability';

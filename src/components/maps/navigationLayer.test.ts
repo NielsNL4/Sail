@@ -37,7 +37,16 @@ describe('navigationLayer', () => {
     expect(fairwaysToGeoJson([fairway]).features[0].properties).toEqual({
       id: 'f1',
       cemtClass: 'IV',
+      unsuitable: false,
     });
+    expect(
+      fairwaysToGeoJson([fairway], {
+        draftMeters: 3,
+        airDraftMeters: null,
+        beamMeters: null,
+        lengthMeters: null,
+      }).features[0].properties.unsuitable,
+    ).toBe(true);
     expect(markersToGeoJson([marker]).features[0].geometry.coordinates).toEqual(
       [5, 52],
     );

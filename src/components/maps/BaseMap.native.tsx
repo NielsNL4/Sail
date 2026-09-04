@@ -20,6 +20,10 @@ import {
   MARKER_HIT_LAYER_ID,
   MARKER_SOURCE_ID,
   MARKER_SYMBOL_LAYER_ID,
+  BRIDGE_HIT_LAYER_ID,
+  BRIDGE_SOURCE_ID,
+  BRIDGE_SYMBOL_LAYER_ID,
+  bridgesToGeoJson,
   fairwayColor,
   fairwaysToGeoJson,
   markersToGeoJson,
@@ -158,6 +162,10 @@ export default function BaseMap({
   markersVisible,
   onFairwayPress,
   onMarkerPress,
+  vesselProfile,
+  bridges,
+  bridgesVisible,
+  onBridgePress,
 }: BaseMapProps) {
   const cameraRef = useRef<ComponentRef<typeof Mapbox.Camera>>(null);
   const mapViewRef = useRef<ComponentRef<typeof Mapbox.MapView>>(null);
@@ -251,6 +259,8 @@ export default function BaseMap({
               MARKER_SYMBOL_LAYER_ID,
               FAIRWAY_HIT_LAYER_ID,
               FAIRWAY_LAYER_ID,
+              BRIDGE_HIT_LAYER_ID,
+              BRIDGE_SYMBOL_LAYER_ID,
             ],
           );
         const mmsi = vesselFeatures?.features[0]?.properties?.mmsi;
@@ -268,6 +278,13 @@ export default function BaseMap({
           return;
         }
         const fairwayId = featureProperties?.id;
+        if (
+          typeof fairwayId === 'string' &&
+          featureProperties?.kind === 'bridge'
+        ) {
+          onBridgePress(fairwayId);
+          return;
+        }
         if (typeof fairwayId === 'string') {
           onFairwayPress(fairwayId);
           return;
@@ -405,7 +422,7 @@ export default function BaseMap({
       />
       <Mapbox.ShapeSource
         id={FAIRWAY_SOURCE_ID}
-        shape={fairwaysToGeoJson(fairways)}
+        shape={fairwaysToGeoJson(fairways, vesselProfile)}
       >
         <Mapbox.LineLayer
           id={FAIRWAY_HIT_LAYER_ID}
@@ -419,7 +436,12 @@ export default function BaseMap({
         <Mapbox.LineLayer
           id={FAIRWAY_LAYER_ID}
           style={{
-            lineColor: fairwayColor('IV'),
+            lineColor: [
+              'case',
+              ['get', 'unsuitable'],
+              '#dc2626',
+              fairwayColor('IV'),
+            ],
             lineOpacity: 0.86,
             lineWidth: ['interpolate', ['linear'], ['zoom'], 5, 1.2, 14, 4],
             visibility: fairwaysVisible ? 'visible' : 'none',
@@ -481,6 +503,39 @@ export default function BaseMap({
             textHaloWidth: 1.5,
             textSize: 16,
             visibility: markersVisible ? 'visible' : 'none',
+          }}
+        />
+      </Mapbox.ShapeSource>
+      <Mapbox.ShapeSource
+        id={BRIDGE_SOURCE_ID}
+        shape={bridgesToGeoJson(bridges)}
+      >
+        <Mapbox.CircleLayer
+          id={BRIDGE_HIT_LAYER_ID}
+          style={{
+            circleOpacity: 0,
+            circleRadius: 14,
+            visibility: bridgesVisible ? 'visible' : 'none',
+          }}
+        />
+        <Mapbox.SymbolLayer
+          id={BRIDGE_SYMBOL_LAYER_ID}
+          style={{
+            textAllowOverlap: true,
+            textField: [
+              'case',
+              ['==', ['get', 'liveStatus'], 'open'],
+              '↕',
+              '?',
+            ],
+            textSize: 18,
+            textColor: [
+              'case',
+              ['==', ['get', 'liveStatus'], 'open'],
+              '#dc2626',
+              '#475569',
+            ],
+            visibility: bridgesVisible ? 'visible' : 'none',
           }}
         />
       </Mapbox.ShapeSource>

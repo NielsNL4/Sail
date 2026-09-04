@@ -111,7 +111,7 @@ Phase J implementation:
   five position reports within seconds. Native visual rendering remains
   unverified on this Linux development host.
 
-### Phase K — Confirmed RWS Navigation Layers
+### Phase K — Confirmed RWS Navigation Layers (complete)
 
 Implement the confirmed PDOK navigation sources without guessing at the
 unconfirmed FIS/DISK bridge and lock feeds.
@@ -130,8 +130,10 @@ Phase K implementation:
 - FIS/vaarweginformatie.nl has no confirmed documented JSON/OGC/WFS/API export;
   DISK's current public endpoint and schema are also unconfirmed. No bridge or
   lock records are fabricated, and Blauwe Golf Verbindend is excluded.
-- Automated and Expo Web verification is required before this phase is marked
-  complete. Native visual rendering remains unverified on Linux.
+- All 82 unit tests, TypeScript, ESLint, Prettier, and the production Expo Web
+  export pass. Live PDOK requests returned VNDS fairways plus floating and fixed
+  marker features in the active Dutch-water viewport. Native visual rendering
+  remains unverified on Linux.
 
 ### Step 2 — Bridge/Lock Provider Boundary
 

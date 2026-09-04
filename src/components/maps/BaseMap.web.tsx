@@ -17,8 +17,12 @@ import {
   MARKER_HIT_LAYER_ID,
   MARKER_SOURCE_ID,
   MARKER_SYMBOL_LAYER_ID,
+  BRIDGE_HIT_LAYER_ID,
+  BRIDGE_SOURCE_ID,
+  BRIDGE_SYMBOL_LAYER_ID,
   fairwayColor,
   fairwaysToGeoJson,
+  bridgesToGeoJson,
   markersToGeoJson,
 } from './navigationLayer';
 import {
@@ -81,6 +85,7 @@ function registerOverlaySlots(
   vesselsVisible: boolean,
   fairwaysVisible: boolean,
   markersVisible: boolean,
+  bridgesVisible: boolean,
 ) {
   if (!map.getSource(COASTAL_DEPTH_SOURCE_ID)) {
     map.addSource(COASTAL_DEPTH_SOURCE_ID, {
@@ -263,25 +268,30 @@ function registerOverlaySlots(
       layout: { visibility: fairwaysVisible ? 'visible' : 'none' },
       paint: {
         'line-color': [
-          'match',
-          ['get', 'cemtClass'],
-          '0',
-          fairwayColor('0'),
-          'I',
-          fairwayColor('I'),
-          'II',
-          fairwayColor('II'),
-          'III',
-          fairwayColor('III'),
-          'IV',
-          fairwayColor('IV'),
-          'V',
-          fairwayColor('V'),
-          'VI',
-          fairwayColor('VI'),
-          'VIc',
-          fairwayColor('VIc'),
-          fairwayColor('unknown'),
+          'case',
+          ['get', 'unsuitable'],
+          '#dc2626',
+          [
+            'match',
+            ['get', 'cemtClass'],
+            '0',
+            fairwayColor('0'),
+            'I',
+            fairwayColor('I'),
+            'II',
+            fairwayColor('II'),
+            'III',
+            fairwayColor('III'),
+            'IV',
+            fairwayColor('IV'),
+            'V',
+            fairwayColor('V'),
+            'VI',
+            fairwayColor('VI'),
+            'VIc',
+            fairwayColor('VIc'),
+            fairwayColor('unknown'),
+          ],
         ],
         'line-opacity': 0.86,
         'line-width': ['interpolate', ['linear'], ['zoom'], 5, 1.2, 14, 4],
@@ -357,6 +367,48 @@ function registerOverlaySlots(
       },
     });
   }
+  if (!map.getSource(BRIDGE_SOURCE_ID)) {
+    map.addSource(BRIDGE_SOURCE_ID, {
+      type: 'geojson',
+      data: bridgesToGeoJson([]),
+    });
+  }
+  if (!map.getLayer(BRIDGE_HIT_LAYER_ID)) {
+    map.addLayer({
+      id: BRIDGE_HIT_LAYER_ID,
+      type: 'circle',
+      source: BRIDGE_SOURCE_ID,
+      layout: { visibility: bridgesVisible ? 'visible' : 'none' },
+      paint: {
+        'circle-color': '#0f172a',
+        'circle-opacity': 0,
+        'circle-radius': 14,
+      },
+    });
+  }
+  if (!map.getLayer(BRIDGE_SYMBOL_LAYER_ID)) {
+    map.addLayer({
+      id: BRIDGE_SYMBOL_LAYER_ID,
+      type: 'symbol',
+      source: BRIDGE_SOURCE_ID,
+      layout: {
+        visibility: bridgesVisible ? 'visible' : 'none',
+        'text-allow-overlap': true,
+        'text-field': ['case', ['==', ['get', 'liveStatus'], 'open'], '↕', '?'],
+        'text-size': 18,
+      },
+      paint: {
+        'text-color': [
+          'case',
+          ['==', ['get', 'liveStatus'], 'open'],
+          '#dc2626',
+          '#475569',
+        ],
+        'text-halo-color': '#f8fafc',
+        'text-halo-width': 1.5,
+      },
+    });
+  }
 }
 
 function setWindLayerVisibility(map: MapboxMap, visible: boolean) {
@@ -388,6 +440,10 @@ export default function BaseMap({
   markersVisible,
   onFairwayPress,
   onMarkerPress,
+  vesselProfile,
+  bridges,
+  bridgesVisible,
+  onBridgePress,
 }: BaseMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapboxMap | null>(null);
@@ -410,9 +466,16 @@ export default function BaseMap({
   const markersRef = useRef(markers);
   const fairwaysVisibleRef = useRef(fairwaysVisible);
   const markersVisibleRef = useRef(markersVisible);
+  const bridgesVisibleRef = useRef(bridgesVisible);
+  const vesselProfileRef = useRef(vesselProfile);
+  const bridgesRef = useRef(bridges);
+  const onBridgePressRef = useRef(onBridgePress);
   const mapRegion = useLocationStore((state) => state.mapRegion);
   const setMapRegion = useLocationStore((state) => state.setMapRegion);
   const setMapZoom = useLocationStore((state) => state.setMapZoom);
+  useEffect(() => {
+    onBridgePressRef.current = onBridgePress;
+  }, [onBridgePress]);
   const depthVisible = useLayersStore((state) => state.visibility.depth);
   const windVisible = useLayersStore((state) => state.visibility.wind);
   const mapStyleId = useSettingsStore((state) => state.mapStyle);
@@ -501,12 +564,13 @@ export default function BaseMap({
         vesselsVisibleRef.current,
         fairwaysVisibleRef.current,
         markersVisibleRef.current,
+        bridgesVisibleRef.current,
       );
       const vesselSource = map.getSource(VESSEL_SOURCE_ID) as
         GeoJSONSource | undefined;
       vesselSource?.setData(vesselsToGeoJson(vesselsRef.current));
       (map.getSource(FAIRWAY_SOURCE_ID) as GeoJSONSource | undefined)?.setData(
-        fairwaysToGeoJson(fairwaysRef.current),
+        fairwaysToGeoJson(fairwaysRef.current, vesselProfileRef.current),
       );
       (map.getSource(MARKER_SOURCE_ID) as GeoJSONSource | undefined)?.setData(
         markersToGeoJson(markersRef.current),
@@ -553,6 +617,14 @@ export default function BaseMap({
         handleFairwayPress(fairwayId);
         return;
       }
+      const bridgeFeature = map.queryRenderedFeatures(event.point, {
+        layers: [BRIDGE_HIT_LAYER_ID, BRIDGE_SYMBOL_LAYER_ID],
+      })[0];
+      const bridgeId = bridgeFeature?.properties?.id;
+      if (typeof bridgeId === 'string') {
+        onBridgePressRef.current(bridgeId);
+        return;
+      }
       handleDepthPress(
         { latitude: event.lngLat.lat, longitude: event.lngLat.lng },
         map.getZoom(),
@@ -577,11 +649,22 @@ export default function BaseMap({
   }, [markersVisible]);
 
   useEffect(() => {
+    bridgesVisibleRef.current = bridgesVisible;
+  }, [bridgesVisible]);
+
+  useEffect(() => {
     fairwaysRef.current = fairways;
     (
       mapRef.current?.getSource(FAIRWAY_SOURCE_ID) as GeoJSONSource | undefined
-    )?.setData(fairwaysToGeoJson(fairways));
-  }, [fairways, styleReady]);
+    )?.setData(fairwaysToGeoJson(fairways, vesselProfile));
+  }, [fairways, styleReady, vesselProfile]);
+
+  useEffect(() => {
+    vesselProfileRef.current = vesselProfile;
+    (
+      mapRef.current?.getSource(FAIRWAY_SOURCE_ID) as GeoJSONSource | undefined
+    )?.setData(fairwaysToGeoJson(fairwaysRef.current, vesselProfile));
+  }, [styleReady, vesselProfile]);
 
   useEffect(() => {
     markersRef.current = markers;
@@ -589,6 +672,13 @@ export default function BaseMap({
       mapRef.current?.getSource(MARKER_SOURCE_ID) as GeoJSONSource | undefined
     )?.setData(markersToGeoJson(markers));
   }, [markers, styleReady]);
+
+  useEffect(() => {
+    bridgesRef.current = bridges;
+    (
+      mapRef.current?.getSource(BRIDGE_SOURCE_ID) as GeoJSONSource | undefined
+    )?.setData(bridgesToGeoJson(bridges));
+  }, [bridges, styleReady]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -615,6 +705,19 @@ export default function BaseMap({
         );
     }
   }, [markersVisible, styleReady]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map?.isStyleLoaded()) return;
+    for (const layerId of [BRIDGE_HIT_LAYER_ID, BRIDGE_SYMBOL_LAYER_ID]) {
+      if (map.getLayer(layerId))
+        map.setLayoutProperty(
+          layerId,
+          'visibility',
+          bridgesVisible ? 'visible' : 'none',
+        );
+    }
+  }, [bridgesVisible, styleReady]);
 
   useEffect(() => {
     vesselsRef.current = vessels;
@@ -786,8 +889,10 @@ export default function BaseMap({
     );
     let lastUpdate = performance.now();
     let animationFrame = 0;
+    let active = true;
 
     const animate = (now: number) => {
+      if (!active) return;
       if (now - lastUpdate >= 100) {
         particles = advanceWindParticles(
           particles,
@@ -806,10 +911,8 @@ export default function BaseMap({
     animationFrame = requestAnimationFrame(animate);
 
     return () => {
+      active = false;
       cancelAnimationFrame(animationFrame);
-      if (map.getSource(WIND_SOURCE_ID)) {
-        source.setData(EMPTY_WIND_PARTICLES);
-      }
     };
   }, [styleReady, windField, windRegion, windRenderingEnabled, zoom]);
 
