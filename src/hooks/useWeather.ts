@@ -1,12 +1,12 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 import { strings } from '@/i18n';
 import { normalizeApiError, weatherService } from '@/services';
 import { useWeatherStore } from '@/stores';
 import type { Coordinates } from '@/types';
-import { logApiError } from '@/utils';
+import { logApiError, WEATHER_FRESHNESS_MS } from '@/utils';
 
-const WEATHER_CACHE_DURATION_MS = 15 * 60 * 1_000;
+const WEATHER_RETRY_DELAY_MS = 60 * 1_000;
 
 function isFreshForCoordinates(
   coordinates: Coordinates,
@@ -18,10 +18,15 @@ function isFreshForCoordinates(
     Math.abs(coordinates.latitude - weatherCoordinates.latitude) < 0.1 &&
     Math.abs(coordinates.longitude - weatherCoordinates.longitude) < 0.1;
 
-  return age < WEATHER_CACHE_DURATION_MS && nearRequestedPoint;
+  return age < WEATHER_FRESHNESS_MS && nearRequestedPoint;
 }
 
-export function useWeather(coordinates: Coordinates, enabled: boolean) {
+export function useWeather(
+  coordinates: Coordinates,
+  enabled: boolean,
+  networkAvailable = true,
+) {
+  const [refreshTick, setRefreshTick] = useState(0);
   const weather = useWeatherStore((state) => state.weather);
   const isLoading = useWeatherStore((state) => state.isLoading);
   const error = useWeatherStore((state) => state.error);
@@ -42,32 +47,66 @@ export function useWeather(coordinates: Coordinates, enabled: boolean) {
         weather.current.coordinates,
       )
     ) {
+      const age = Date.now() - new Date(weather.fetchedAt).getTime();
+      const timeout = setTimeout(
+        () => setRefreshTick((tick) => tick + 1),
+        Math.max(0, WEATHER_FRESHNESS_MS - age),
+      );
+
+      return () => clearTimeout(timeout);
+    }
+
+    if (!networkAvailable) {
       return;
     }
 
     const controller = new AbortController();
+    let active = true;
+    let retryTimeout: ReturnType<typeof setTimeout> | undefined;
     setError(null);
     setLoading(true);
 
     weatherService
       .getWeather(coordinates, controller.signal)
-      .then(setWeather)
+      .then((nextWeather) => {
+        if (active) {
+          setWeather(nextWeather);
+        }
+      })
       .catch((requestError: unknown) => {
         const apiError = normalizeApiError(requestError, {
           operation: 'loadWeather',
           provider: 'open-meteo',
         });
 
-        if (apiError.kind === 'canceled') {
+        if (apiError.kind === 'canceled' || !active) {
           return;
         }
 
         logApiError(apiError);
         setError(strings.weatherUnavailable);
+        retryTimeout = setTimeout(
+          () => setRefreshTick((tick) => tick + 1),
+          WEATHER_RETRY_DELAY_MS,
+        );
       });
 
-    return () => controller.abort();
-  }, [coordinates, enabled, setError, setLoading, setWeather, weather]);
+    return () => {
+      active = false;
+      controller.abort();
+      clearTimeout(retryTimeout);
+      setLoading(false);
+    };
+  }, [
+    coordinates,
+    enabled,
+    networkAvailable,
+    refreshTick,
+    setError,
+    setLoading,
+    setWeather,
+    weather,
+  ]);
 
   return { weather, isLoading, error };
 }

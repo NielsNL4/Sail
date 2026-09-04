@@ -30,6 +30,12 @@ const layers: LayerDefinition[] = [
     available: true,
   },
   {
+    id: 'vessels',
+    icon: 'boat-outline',
+    label: strings.vesselsLayer,
+    available: true,
+  },
+  {
     id: 'tides',
     icon: 'pulse-outline',
     label: strings.tidesLayer,

@@ -17,3 +17,9 @@ export type {
 export type { Waypoint, WaypointCategory } from './Navigation';
 export type { DepthSample, DepthSampleSource, WaterProviderId } from './Depth';
 export type { DepthMode, MapStyleId, WindColorMode } from './Map';
+export type {
+  AISBoundingBox,
+  AISConnectionStatus,
+  AISVessel,
+  VesselDimensions,
+} from './Vessel';

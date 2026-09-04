@@ -28,15 +28,28 @@ function expandRegion(region: MapRegion, zoom: number): MapRegion {
   };
 }
 
-function fieldCoversRegion(
+export function windFieldContainsRegion(
   field: WindField,
   region: MapRegion,
-  gridSize: number,
 ): boolean {
   const west = region.longitude - region.longitudeDelta / 2;
   const east = region.longitude + region.longitudeDelta / 2;
   const south = region.latitude - region.latitudeDelta / 2;
   const north = region.latitude + region.latitudeDelta / 2;
+
+  return (
+    west >= field.bounds.west &&
+    east <= field.bounds.east &&
+    south >= field.bounds.south &&
+    north <= field.bounds.north
+  );
+}
+
+function fieldCoversRegion(
+  field: WindField,
+  region: MapRegion,
+  gridSize: number,
+): boolean {
   const isFresh =
     Date.now() - new Date(field.fetchedAt).getTime() <
     WIND_FIELD_CACHE_DURATION_MS;
@@ -45,10 +58,7 @@ function fieldCoversRegion(
     isFresh &&
     field.rows >= gridSize &&
     field.columns >= gridSize &&
-    west >= field.bounds.west &&
-    east <= field.bounds.east &&
-    south >= field.bounds.south &&
-    north <= field.bounds.north
+    windFieldContainsRegion(field, region)
   );
 }
 
@@ -62,6 +72,7 @@ export function useWindField(
   const isLoading = useWindFieldStore((state) => state.isLoading);
   const error = useWindFieldStore((state) => state.error);
   const startLoading = useWindFieldStore((state) => state.startLoading);
+  const stopLoading = useWindFieldStore((state) => state.stopLoading);
   const setField = useWindFieldStore((state) => state.setField);
   const setError = useWindFieldStore((state) => state.setError);
   const gridSize = windFieldGridSizeForZoom(zoom);
@@ -114,6 +125,7 @@ export function useWindField(
     return () => {
       active = false;
       controller.abort();
+      stopLoading();
     };
   }, [
     enabled,
@@ -124,6 +136,7 @@ export function useWindField(
     setError,
     setField,
     startLoading,
+    stopLoading,
     zoom,
   ]);
 

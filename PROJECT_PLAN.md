@@ -2,10 +2,11 @@
 
 ## Current Status
 
-- Active phase: Phase H — Layer Menu (implemented; awaiting review)
+- Active phase: Phase J — Live AIS Traffic (implemented and verified)
 - Phase F — Wind Animation is complete.
 - Mapbox Studio nautical basemap styling is deferred until the developer is ready.
-- Phase G is implemented, tested, and reviewed; do not advance to Phase I until Phase H is implemented, tested, and reviewed.
+- Phases G and H are implemented, tested, and reviewed.
+- Phase I is implemented and awaiting review.
 
 ### Phase G Verification
 
@@ -76,6 +77,39 @@ Phase H implementation:
 
 Verify offline behavior (airplane mode / cache-only) for weather and depth data, with a visible "last updated" / stale-data indicator.
 General QA pass against the Definition of Done below.
+
+Phase I implementation:
+
+- Expo-compatible NetInfo monitors connectivity on Android, iOS, and web.
+- Weather remains persisted in AsyncStorage, refreshes at the 15-minute freshness boundary, and reports its update timestamp plus cache, stale, or offline state in Dutch.
+- A failed weather refresh retains the last successful forecast instead of replacing it with an empty error state.
+- Wind-field requests pause offline; an already loaded in-memory field remains available and is explicitly marked as such.
+- Depth point inspection is disabled offline. Mapbox-managed cached raster tiles may remain visible and the UI clearly describes this best-effort behavior; numeric depth results are not persisted.
+- All 67 unit tests, TypeScript, ESLint, Prettier, and the production web export pass. Visual offline review and native rendering remain pending.
+
+### Phase J — Live AIS Traffic
+
+Add a persisted `Andere schepen` layer backed by a provider-neutral AIS service.
+Keep reports in memory, scope subscriptions to the map viewport, and render
+selectable heading/course-oriented vessel markers on web and native.
+
+Phase J implementation:
+
+- A generic `AISService` interface isolates connection, status, and vessel
+  updates from AISStream-specific message normalization.
+- A server-side WebSocket relay protects `AISSTREAM_API_KEY`, keeps one upstream
+  provider connection, combines client viewport subscriptions, and filters
+  reports per client. Direct Expo Web access is intentionally not used because
+  AISStream forbids browser connections and public API keys.
+- The app batches MMSI-keyed updates once per second, retains static vessel
+  metadata, expires reports after 15 minutes, and never persists live traffic.
+- Web and native maps use the same GeoJSON vessel data and show selectable,
+  heading/course-oriented markers. The Dutch details panel includes name,
+  MMSI, speed, course, and ship type when broadcast.
+- All 77 unit tests, TypeScript, ESLint, Prettier, and the production web export
+  pass. A live relay check received an AISStream subscription confirmation and
+  five position reports within seconds. Native visual rendering remains
+  unverified on this Linux development host.
 
 ## Definition of Done
 

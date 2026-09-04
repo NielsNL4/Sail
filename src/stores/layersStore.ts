@@ -3,7 +3,7 @@ import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
 export type LayerId =
-  'wind' | 'depth' | 'tides' | 'waypoints' | 'weatherWarnings';
+  'wind' | 'depth' | 'vessels' | 'tides' | 'waypoints' | 'weatherWarnings';
 
 export type LayerVisibility = Record<LayerId, boolean>;
 
@@ -17,6 +17,7 @@ interface LayersState {
 const defaultVisibility: LayerVisibility = {
   wind: true,
   depth: false,
+  vessels: false,
   tides: false,
   waypoints: false,
   weatherWarnings: true,
@@ -43,6 +44,17 @@ export const useLayersStore = create<LayersState>()(
       name: 'sail-layers',
       storage: createJSONStorage(() => AsyncStorage),
       partialize: ({ visibility }) => ({ visibility }),
+      merge: (persisted, current) => {
+        const saved = persisted as Partial<LayersState>;
+        return {
+          ...current,
+          ...saved,
+          visibility: {
+            ...defaultVisibility,
+            ...saved.visibility,
+          },
+        };
+      },
     },
   ),
 );

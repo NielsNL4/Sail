@@ -1,5 +1,6 @@
 export { useWeatherStore } from './weatherStore';
 export { useWindFieldStore } from './windFieldStore';
+export { useAISStore } from './aisStore';
 export { useLocationStore } from './locationStore';
 export {
   useLayersStore,

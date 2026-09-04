@@ -11,6 +11,11 @@ MAPBOX_DOWNLOADS_TOKEN=sk.your_secret_downloads_token
 EXPO_PUBLIC_MAPBOX_STYLE_MODERN=mapbox://styles/your-account/your-modern-style
 EXPO_PUBLIC_MAPBOX_STYLE_TRADITIONAL=mapbox://styles/your-account/your-traditional-style
 EXPO_PUBLIC_MAPBOX_STYLE_DARK=mapbox://styles/your-account/your-dark-style
+AISSTREAM_API_KEY=your_server_side_api_key
+AIS_RELAY_HOST=127.0.0.1
+AIS_RELAY_PORT=8790
+AIS_RELAY_ALLOWED_ORIGINS=http://localhost:8081
+EXPO_PUBLIC_AIS_RELAY_URL=ws://localhost:8790
 ```
 
 Generate both tokens at https://console.mapbox.com/account/access-tokens/.
@@ -20,6 +25,18 @@ Generate both tokens at https://console.mapbox.com/account/access-tokens/.
 - `MAPBOX_DOWNLOADS_TOKEN` is a secret token with the `DOWNLOADS:READ` scope.
   It is used only while native Mapbox dependencies are installed. Never expose
   it through an `EXPO_PUBLIC_` variable or commit it.
+- `AISSTREAM_API_KEY` is read only by the local/server relay. AISStream forbids
+  direct browser connections, so the key must not use an `EXPO_PUBLIC_` name.
+- `EXPO_PUBLIC_AIS_RELAY_URL` is the WebSocket URL used by web, iOS, and
+  Android. For a physical device, replace `localhost` with the development
+  machine's LAN address or a deployed secure `wss://` relay.
+- `AIS_RELAY_PORT` selects the local relay port and must match the port in
+  `EXPO_PUBLIC_AIS_RELAY_URL`.
+- `AIS_RELAY_HOST` defaults to loopback. Set it to `0.0.0.0` only when a
+  physical device must connect over a trusted development network.
+- `AIS_RELAY_ALLOWED_ORIGINS` is a comma-separated allowlist for browser
+  origins. Localhost origins are accepted by default; set this explicitly when
+  serving Expo Web from another host.
 
 `app.config.js` maps `MAPBOX_DOWNLOADS_TOKEN` to the environment variable name
 expected by the current `@rnmapbox/maps` native installer. The secret is not
@@ -41,6 +58,21 @@ npm run web
 ```
 
 Open the URL printed by Expo, normally http://localhost:8081.
+
+Start the AIS relay in another terminal before enabling `Andere schepen`:
+
+```sh
+npm run ais-relay
+```
+
+The relay maintains one upstream AISStream connection, combines active client
+viewports into the provider subscription, and forwards each report only to
+clients whose current viewport contains it. Viewport changes replace the
+upstream subscription at AISStream's supported maximum rate of once per second.
+
+For production, expose the relay only through TLS (`wss://`) and place it behind
+the deployment platform's authentication, origin controls, and rate limiting;
+the included process is intentionally a minimal development relay.
 
 ## Native
 
@@ -95,8 +127,10 @@ is not required for the current local development workflow.
   reports bottom elevation in metres relative to NAP. Point inspection is not
   available in ENC mode to avoid mixing NAP measurements with chart-datum data.
 - The map controls are exposed through a dedicated layer menu. Wind and depth
-  are active overlays; tides, waypoints, and weather warnings are visible as
-  disabled placeholders until their data overlays are implemented. The menu
+  are active overlays. `Andere schepen` opens the AIS relay only while enabled,
+  uses the current debounced viewport, and shows course/heading-oriented vessel
+  markers with name, MMSI, speed, course, and type details. Tides, waypoints,
+  and weather warnings remain disabled placeholders. The menu
   uses a two-column phone layout, caps its width on tablets, and scrolls on
   short screens so controls do not overlap.
 
@@ -107,3 +141,22 @@ safety-margin corrections.
 API failures are normalized before reaching the UI. On web, non-cancellation
 failures are written to the browser console as safe structured metadata without
 request headers, tokens, URLs, or response payloads.
+
+## Offline Behavior
+
+- Connectivity is monitored with `@react-native-community/netinfo` on web and
+  native platforms.
+- Weather is persisted in AsyncStorage. Rehydrated data is marked as cached,
+  remains visible when a refresh fails, and is considered stale after 15
+  minutes. The map panel shows the fetch timestamp and cache, stale, or offline
+  status.
+- Wind grids are retained only in memory. New grid requests pause offline; a
+  grid loaded during the current session can continue animating and is marked
+  as previously loaded.
+- Depth rasters use Mapbox-managed HTTP tile caching. Previously loaded tiles
+  may remain visible offline, but availability is platform- and cache-dependent.
+  WMS point inspection is disabled offline and numeric depth samples are not
+  persisted.
+- AIS vessel positions are never persisted. The stream disconnects and live
+  vessels are cleared when the layer is disabled or connectivity is lost;
+  reports not refreshed for 15 minutes expire from the in-memory store.

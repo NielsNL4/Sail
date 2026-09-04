@@ -41,12 +41,22 @@ export const useWeatherStore = create<WeatherState>()(
         const persistedWeather = (
           persistedState as PersistedWeatherState | undefined
         )?.weather;
+        const currentWeather = currentState.weather;
+        const persistedTime = persistedWeather
+          ? new Date(persistedWeather.fetchedAt).getTime()
+          : Number.NEGATIVE_INFINITY;
+        const currentTime = currentWeather
+          ? new Date(currentWeather.fetchedAt).getTime()
+          : Number.NEGATIVE_INFINITY;
 
         return {
           ...currentState,
-          weather: persistedWeather
-            ? { ...persistedWeather, isCached: true }
-            : null,
+          weather:
+            currentWeather && currentTime >= persistedTime
+              ? currentWeather
+              : persistedWeather
+                ? { ...persistedWeather, isCached: true }
+                : null,
         };
       },
     },

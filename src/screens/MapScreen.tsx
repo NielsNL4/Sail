@@ -18,10 +18,18 @@ import {
   regionToZoom,
   shouldRenderWindParticles,
 } from '@/components/maps';
-import { useDepthInspection, useLocation, useWeather } from '@/hooks';
+import {
+  useDepthInspection,
+  useAIS,
+  useLocation,
+  useNetworkStatus,
+  useWeather,
+  windFieldContainsRegion,
+} from '@/hooks';
 import { strings } from '@/i18n';
 import {
   useLayersStore,
+  useAISStore,
   useLocationStore,
   useSettingsStore,
   useWindFieldStore,
@@ -30,8 +38,12 @@ import type { DepthMode, MapStyleId, WindColorMode } from '@/types';
 import {
   directionToCompass,
   DUTCH_WATERS_REGION,
+  formatDataTimestamp,
   formatTemperature,
   formatWindSpeed,
+  isTimestampStale,
+  shipTypeLabel,
+  WEATHER_FRESHNESS_MS,
 } from '@/utils';
 
 const mapStyles: {
@@ -66,9 +78,11 @@ const depthModes: { id: DepthMode; label: string }[] = [
 export function MapScreen() {
   const insets = useSafeAreaInsets();
   const { height: screenHeight, width: screenWidth } = useWindowDimensions();
+  const { isOffline, networkEpoch } = useNetworkStatus();
   const [focusRequestId, setFocusRequestId] = useState(0);
   const depthVisible = useLayersStore((state) => state.visibility.depth);
   const windVisible = useLayersStore((state) => state.visibility.wind);
+  const vesselsVisible = useLayersStore((state) => state.visibility.vessels);
   const layerVisibility = useLayersStore((state) => state.visibility);
   const toggleLayer = useLayersStore((state) => state.toggleLayer);
   const windSpeedUnit = useSettingsStore((state) => state.windSpeedUnit);
@@ -84,6 +98,12 @@ export function MapScreen() {
   const windField = useWindFieldStore((state) => state.field);
   const isWindFieldLoading = useWindFieldStore((state) => state.isLoading);
   const windFieldError = useWindFieldStore((state) => state.error);
+  const vesselsByMmsi = useAISStore((state) => state.vessels);
+  const aisStatus = useAISStore((state) => state.connectionStatus);
+  const aisError = useAISStore((state) => state.error);
+  const [selectedVesselMmsi, setSelectedVesselMmsi] = useState<string | null>(
+    null,
+  );
   const {
     location,
     permissionStatus,
@@ -97,7 +117,7 @@ export function MapScreen() {
     weather,
     isLoading: isWeatherLoading,
     error: weatherError,
-  } = useWeather(weatherCoordinates, windVisible);
+  } = useWeather(weatherCoordinates, windVisible, !isOffline);
   const windSpeed = weather
     ? formatWindSpeed(weather.current.wind.speedMetersPerSecond, windSpeedUnit)
     : null;
@@ -116,7 +136,20 @@ export function MapScreen() {
     inspectionError,
     inspectDepth,
     clearDepthInspection,
-  } = useDepthInspection();
+  } = useDepthInspection(!isOffline, networkEpoch);
+  const weatherIsStale = weather
+    ? isTimestampStale(weather.fetchedAt, WEATHER_FRESHNESS_MS) ||
+      Boolean(weatherError)
+    : false;
+  const activeMapRegion = mapRegion ?? DUTCH_WATERS_REGION;
+  useAIS(activeMapRegion, vesselsVisible && !isOffline);
+  const vessels = Object.values(vesselsByMmsi);
+  const selectedVessel = selectedVesselMmsi
+    ? (vesselsByMmsi[selectedVesselMmsi] ?? null)
+    : null;
+  const windFieldAvailableOffline = Boolean(
+    windField && windFieldContainsRegion(windField, activeMapRegion),
+  );
 
   const handleLocatePress = async () => {
     const nextLocation = await requestLocation();
@@ -139,7 +172,7 @@ export function MapScreen() {
   const layerPanelTop = insets.top + (isMocked ? 68 : 14);
   const layerPanelWidth = Math.min(380, screenWidth - 28);
   const layerPanelMaxHeight = Math.max(
-    240,
+    0,
     screenHeight - layerPanelTop - insets.bottom - 92,
   );
 
@@ -151,7 +184,11 @@ export function MapScreen() {
         initialRegion={DUTCH_WATERS_REGION}
         location={location}
         locationTitle={locationTitle}
+        networkAvailable={!isOffline}
         onDepthPress={inspectDepth}
+        onVesselPress={setSelectedVesselMmsi}
+        vessels={vessels}
+        vesselsVisible={vesselsVisible}
       />
 
       <ScrollView
@@ -171,10 +208,58 @@ export function MapScreen() {
             if (layer === 'depth' && depthVisible) {
               clearDepthInspection();
             }
+            if (layer === 'vessels' && vesselsVisible) {
+              setSelectedVesselMmsi(null);
+            }
             toggleLayer(layer);
           }}
           visibility={layerVisibility}
         />
+
+        {vesselsVisible ? (
+          <View style={styles.aisPanel}>
+            <Text style={styles.aisStatus}>
+              {isOffline
+                ? strings.aisOffline
+                : aisStatus === 'connected'
+                  ? strings.aisConnected(vessels.length)
+                  : aisStatus === 'connecting'
+                    ? strings.aisConnecting
+                    : (aisError ?? strings.aisUnavailable)}
+            </Text>
+            {selectedVessel ? (
+              <View style={styles.vesselDetails}>
+                <Text style={styles.vesselName}>
+                  {selectedVessel.name ?? strings.aisVesselUnknown}
+                </Text>
+                <Text style={styles.vesselMeta}>
+                  {strings.aisMmsi(selectedVessel.mmsi)}
+                </Text>
+                <View style={styles.vesselValues}>
+                  {selectedVessel.speedKnots !== null ? (
+                    <Text style={styles.vesselMeta}>
+                      {strings.aisSpeed(
+                        selectedVessel.speedKnots.toFixed(1).replace('.', ','),
+                      )}
+                    </Text>
+                  ) : null}
+                  {selectedVessel.courseDegrees !== null ? (
+                    <Text style={styles.vesselMeta}>
+                      {strings.aisCourse(
+                        Math.round(selectedVessel.courseDegrees).toString(),
+                      )}
+                    </Text>
+                  ) : null}
+                </View>
+                {shipTypeLabel(selectedVessel.shipType) ? (
+                  <Text style={styles.vesselMeta}>
+                    {strings.aisType(shipTypeLabel(selectedVessel.shipType)!)}
+                  </Text>
+                ) : null}
+              </View>
+            ) : null}
+          </View>
+        ) : null}
 
         <View style={styles.mapStyleSection}>
           <Text style={styles.mapStyleTitle}>{strings.mapStyle}</Text>
@@ -268,18 +353,43 @@ export function MapScreen() {
                 >
                   <Text style={styles.weatherSource}>
                     {strings.weatherSource}
-                    {weather.isCached ? ` · ${strings.cachedData}` : ''}
                   </Text>
                 </Pressable>
+                <Text style={styles.dataTimestamp}>
+                  {strings.updatedAt(formatDataTimestamp(weather.fetchedAt))}
+                </Text>
+                {isOffline ? (
+                  <Text style={styles.offlineStatus}>
+                    {weatherIsStale
+                      ? strings.offlineStoredStaleData
+                      : strings.offlineStoredData}
+                  </Text>
+                ) : weatherIsStale ? (
+                  <Text style={styles.staleStatus}>
+                    {strings.staleWeatherData}
+                  </Text>
+                ) : weather.isCached ? (
+                  <Text style={styles.dataTimestamp}>{strings.cachedData}</Text>
+                ) : null}
               </>
             ) : (
               <Text style={styles.weatherError}>
-                {weatherError ?? strings.weatherUnavailable}
+                {isOffline
+                  ? strings.weatherOfflineUnavailable
+                  : (weatherError ?? strings.weatherUnavailable)}
               </Text>
             )}
             {!windAnimationAvailable ? (
               <Text style={styles.windAnimationStatus}>
                 {strings.windZoomIn}
+              </Text>
+            ) : isOffline ? (
+              <Text style={styles.offlineStatus}>
+                {windField
+                  ? windFieldAvailableOffline
+                    ? strings.windFieldOffline
+                    : strings.windFieldOutsideOfflineArea
+                  : strings.windFieldOfflineUnavailable}
               </Text>
             ) : isWindFieldLoading && !windField ? (
               <Text style={styles.windAnimationStatus}>
@@ -337,7 +447,9 @@ export function MapScreen() {
             {effectiveMapZoom < 8 ? (
               <Text style={styles.depthStatus}>{strings.depthZoomIn}</Text>
             ) : null}
-            {depthMode === 'bathymetry' && isInspecting ? (
+            {isOffline ? (
+              <Text style={styles.offlineStatus}>{strings.depthOffline}</Text>
+            ) : depthMode === 'bathymetry' && isInspecting ? (
               <View style={styles.loadingRow}>
                 <ActivityIndicator color="#0c4a6e" size="small" />
                 <Text style={styles.depthStatus}>
@@ -471,6 +583,38 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#bae6fd',
   },
+  aisPanel: {
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderTopWidth: 1,
+    borderTopColor: '#bae6fd',
+  },
+  aisStatus: {
+    color: '#075985',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  vesselDetails: {
+    gap: 2,
+    marginTop: 7,
+    padding: 8,
+    borderRadius: 9,
+    backgroundColor: '#e0f2fe',
+  },
+  vesselName: {
+    color: '#082f49',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  vesselMeta: {
+    color: '#334155',
+    fontSize: 10,
+    lineHeight: 14,
+  },
+  vesselValues: {
+    flexDirection: 'row',
+    gap: 10,
+  },
   mapStyleTitle: {
     paddingVertical: 6,
     color: '#475569',
@@ -562,6 +706,26 @@ const styles = StyleSheet.create({
     color: '#0369a1',
     fontSize: 11,
     textDecorationLine: 'underline',
+  },
+  dataTimestamp: {
+    marginTop: 3,
+    color: '#64748b',
+    fontSize: 10,
+    lineHeight: 14,
+  },
+  offlineStatus: {
+    marginTop: 4,
+    color: '#92400e',
+    fontSize: 10,
+    fontWeight: '700',
+    lineHeight: 14,
+  },
+  staleStatus: {
+    marginTop: 4,
+    color: '#b45309',
+    fontSize: 10,
+    fontWeight: '700',
+    lineHeight: 14,
   },
   loadingRow: {
     minHeight: 35,

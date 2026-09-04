@@ -1,9 +1,9 @@
 import mapboxgl, { type GeoJSONSource, type Map as MapboxMap } from 'mapbox-gl';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useRef, useState } from 'react';
 
 import 'mapbox-gl/dist/mapbox-gl.css';
 
-import { useWindField } from '@/hooks';
+import { useWindField, windFieldContainsRegion } from '@/hooks';
 import { strings } from '@/i18n';
 import { useLayersStore, useLocationStore, useSettingsStore } from '@/stores';
 import type { DepthMode, MapStyleId, WindColorMode } from '@/types';
@@ -31,6 +31,12 @@ import {
   getMapStyleUrl,
   regionToZoom,
 } from './mapboxConfig';
+import {
+  VESSEL_HIT_LAYER_ID,
+  VESSEL_MARKER_LAYER_ID,
+  VESSEL_SOURCE_ID,
+  vesselsToGeoJson,
+} from './vesselLayer';
 import {
   advanceWindParticles,
   createWindParticles,
@@ -61,6 +67,7 @@ function registerOverlaySlots(
   depthMode: DepthMode,
   mapStyle: MapStyleId,
   colorMode: WindColorMode,
+  vesselsVisible: boolean,
 ) {
   if (!map.getSource(COASTAL_DEPTH_SOURCE_ID)) {
     map.addSource(COASTAL_DEPTH_SOURCE_ID, {
@@ -177,6 +184,48 @@ function registerOverlaySlots(
       });
     }
   }
+
+  if (!map.getSource(VESSEL_SOURCE_ID)) {
+    map.addSource(VESSEL_SOURCE_ID, {
+      type: 'geojson',
+      data: vesselsToGeoJson([]),
+    });
+  }
+  if (!map.getLayer(VESSEL_HIT_LAYER_ID)) {
+    map.addLayer({
+      id: VESSEL_HIT_LAYER_ID,
+      type: 'circle',
+      source: VESSEL_SOURCE_ID,
+      layout: { visibility: vesselsVisible ? 'visible' : 'none' },
+      paint: {
+        'circle-color': '#38bdf8',
+        'circle-opacity': 0.24,
+        'circle-radius': 12,
+        'circle-stroke-color': '#082f49',
+        'circle-stroke-width': 1,
+      },
+    });
+  }
+  if (!map.getLayer(VESSEL_MARKER_LAYER_ID)) {
+    map.addLayer({
+      id: VESSEL_MARKER_LAYER_ID,
+      type: 'symbol',
+      source: VESSEL_SOURCE_ID,
+      layout: {
+        visibility: vesselsVisible ? 'visible' : 'none',
+        'text-allow-overlap': true,
+        'text-field': '▲',
+        'text-rotation-alignment': 'map',
+        'text-rotate': ['get', 'rotation'],
+        'text-size': 17,
+      },
+      paint: {
+        'text-color': '#075985',
+        'text-halo-color': '#f0f9ff',
+        'text-halo-width': 1.5,
+      },
+    });
+  }
 }
 
 function setWindLayerVisibility(map: MapboxMap, visible: boolean) {
@@ -197,7 +246,11 @@ export default function BaseMap({
   focusRequestId,
   locationTitle,
   depthMode,
+  networkAvailable,
   onDepthPress,
+  vessels,
+  vesselsVisible,
+  onVesselPress,
 }: BaseMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapboxMap | null>(null);
@@ -214,7 +267,8 @@ export default function BaseMap({
   const depthVisibleRef = useRef(useLayersStore.getState().visibility.depth);
   const depthModeRef = useRef(depthMode);
   const windVisibleRef = useRef(useLayersStore.getState().visibility.wind);
-  const onDepthPressRef = useRef(onDepthPress);
+  const vesselsVisibleRef = useRef(vesselsVisible);
+  const vesselsRef = useRef(vessels);
   const mapRegion = useLocationStore((state) => state.mapRegion);
   const setMapRegion = useLocationStore((state) => state.setMapRegion);
   const setMapZoom = useLocationStore((state) => state.setMapZoom);
@@ -227,9 +281,31 @@ export default function BaseMap({
   const windAnimationEnabled = windVisible && shouldRenderWindParticles(zoom);
   const { field: windField } = useWindField(
     windRegion,
-    windAnimationEnabled,
+    windAnimationEnabled && networkAvailable,
     zoom,
   );
+  const windRenderingEnabled =
+    windAnimationEnabled &&
+    (networkAvailable ||
+      Boolean(windField && windFieldContainsRegion(windField, windRegion)));
+  const handleDepthPress = useEffectEvent(
+    (
+      coordinates: { latitude: number; longitude: number },
+      pressZoom: number,
+    ) => {
+      if (
+        depthVisible &&
+        depthMode === 'bathymetry' &&
+        networkAvailable &&
+        pressZoom >= MIN_DEPTH_RASTER_ZOOM
+      ) {
+        onDepthPress(coordinates, pressZoom);
+      }
+    },
+  );
+  const handleVesselPress = useEffectEvent((mmsi: string) => {
+    onVesselPress(mmsi);
+  });
 
   useEffect(() => {
     if (!containerRef.current || !accessToken) {
@@ -275,7 +351,11 @@ export default function BaseMap({
         depthModeRef.current,
         useSettingsStore.getState().mapStyle,
         useSettingsStore.getState().windColorMode,
+        vesselsVisibleRef.current,
       );
+      const vesselSource = map.getSource(VESSEL_SOURCE_ID) as
+        GeoJSONSource | undefined;
+      vesselSource?.setData(vesselsToGeoJson(vesselsRef.current));
       setStyleReady(true);
     });
     map.on('moveend', () => {
@@ -293,20 +373,19 @@ export default function BaseMap({
         ),
       );
     });
-    map.on('click', ({ lngLat }) => {
-      if (
-        depthVisibleRef.current &&
-        depthModeRef.current === 'bathymetry' &&
-        map.getZoom() >= MIN_DEPTH_RASTER_ZOOM
-      ) {
-        onDepthPressRef.current(
-          {
-            latitude: lngLat.lat,
-            longitude: lngLat.lng,
-          },
-          map.getZoom(),
-        );
+    map.on('click', (event) => {
+      const vesselFeature = map.queryRenderedFeatures(event.point, {
+        layers: [VESSEL_HIT_LAYER_ID, VESSEL_MARKER_LAYER_ID],
+      })[0];
+      const mmsi = vesselFeature?.properties?.mmsi;
+      if (typeof mmsi === 'string') {
+        handleVesselPress(mmsi);
+        return;
       }
+      handleDepthPress(
+        { latitude: event.lngLat.lat, longitude: event.lngLat.lng },
+        map.getZoom(),
+      );
     });
     mapRef.current = map;
 
@@ -319,8 +398,28 @@ export default function BaseMap({
   }, [initialRegion, initialViewport, initialZoom, setMapRegion, setMapZoom]);
 
   useEffect(() => {
-    onDepthPressRef.current = onDepthPress;
-  }, [onDepthPress]);
+    vesselsRef.current = vessels;
+    const source = mapRef.current?.getSource(VESSEL_SOURCE_ID) as
+      GeoJSONSource | undefined;
+    source?.setData(vesselsToGeoJson(vessels));
+  }, [styleReady, vessels]);
+
+  useEffect(() => {
+    vesselsVisibleRef.current = vesselsVisible;
+    const map = mapRef.current;
+    if (!map?.isStyleLoaded()) {
+      return;
+    }
+    for (const layerId of [VESSEL_HIT_LAYER_ID, VESSEL_MARKER_LAYER_ID]) {
+      if (map.getLayer(layerId)) {
+        map.setLayoutProperty(
+          layerId,
+          'visibility',
+          vesselsVisible ? 'visible' : 'none',
+        );
+      }
+    }
+  }, [styleReady, vesselsVisible]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -451,7 +550,7 @@ export default function BaseMap({
   useEffect(() => {
     const map = mapRef.current;
 
-    if (!map || !styleReady || !windAnimationEnabled || !windField) {
+    if (!map || !styleReady || !windRenderingEnabled || !windField) {
       return;
     }
 
@@ -493,7 +592,7 @@ export default function BaseMap({
         source.setData(EMPTY_WIND_PARTICLES);
       }
     };
-  }, [styleReady, windAnimationEnabled, windField, windRegion, zoom]);
+  }, [styleReady, windField, windRegion, windRenderingEnabled, zoom]);
 
   if (!accessToken) {
     return <div style={errorStyle}>{strings.mapTokenMissing}</div>;

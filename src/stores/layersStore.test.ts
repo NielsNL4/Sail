@@ -27,6 +27,7 @@ describe('layersStore', () => {
     expect(useLayersStore.getState().visibility).toEqual({
       wind: true,
       depth: false,
+      vessels: false,
       tides: false,
       waypoints: false,
       weatherWarnings: true,
@@ -54,6 +55,32 @@ describe('layersStore', () => {
       wind: false,
       depth: false,
       weatherWarnings: true,
+    });
+  });
+
+  it('adds new layer defaults when rehydrating older settings', async () => {
+    storedValues.set(
+      'sail-layers',
+      JSON.stringify({
+        state: {
+          visibility: {
+            wind: false,
+            depth: true,
+            tides: false,
+            waypoints: false,
+            weatherWarnings: true,
+          },
+        },
+        version: 0,
+      }),
+    );
+
+    await useLayersStore.persist.rehydrate();
+
+    expect(useLayersStore.getState().visibility).toMatchObject({
+      wind: false,
+      depth: true,
+      vessels: false,
     });
   });
 });

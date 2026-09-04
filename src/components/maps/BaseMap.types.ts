@@ -1,4 +1,10 @@
-import type { Coordinates, DepthMode, LocationData, MapRegion } from '@/types';
+import type {
+  AISVessel,
+  Coordinates,
+  DepthMode,
+  LocationData,
+  MapRegion,
+} from '@/types';
 
 export interface BaseMapProps {
   initialRegion: MapRegion;
@@ -6,5 +12,9 @@ export interface BaseMapProps {
   focusRequestId: number;
   locationTitle: string;
   depthMode: DepthMode;
+  networkAvailable: boolean;
   onDepthPress: (coordinates: Coordinates, zoom: number) => void;
+  vessels: AISVessel[];
+  vesselsVisible: boolean;
+  onVesselPress: (mmsi: string) => void;
 }

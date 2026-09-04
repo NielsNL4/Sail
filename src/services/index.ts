@@ -30,3 +30,9 @@ export {
   rijkswaterstaatService,
   type RijkswaterstaatService,
 } from './RijkswaterstaatService';
+export {
+  aisService,
+  createAISService,
+  normalizeAISMessage,
+  type AISService,
+} from './AISService';

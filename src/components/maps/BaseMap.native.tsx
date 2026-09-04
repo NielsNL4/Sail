@@ -1,8 +1,12 @@
-import Mapbox, { type LineLayerStyle, type MapState } from '@rnmapbox/maps';
+import Mapbox, {
+  type LineLayerStyle,
+  type MapState,
+  type SymbolLayerStyle,
+} from '@rnmapbox/maps';
 import { type ComponentRef, useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { useWindField } from '@/hooks';
+import { useWindField, windFieldContainsRegion } from '@/hooks';
 import { strings } from '@/i18n';
 import { useLayersStore, useLocationStore, useSettingsStore } from '@/stores';
 import type { MapRegion, MapStyleId, WindColorMode, WindField } from '@/types';
@@ -30,6 +34,12 @@ import {
   getMapStyleUrl,
   regionToZoom,
 } from './mapboxConfig';
+import {
+  VESSEL_HIT_LAYER_ID,
+  VESSEL_MARKER_LAYER_ID,
+  VESSEL_SOURCE_ID,
+  vesselsToGeoJson,
+} from './vesselLayer';
 import {
   advanceWindParticles,
   createWindParticles,
@@ -126,7 +136,11 @@ export default function BaseMap({
   focusRequestId,
   locationTitle,
   depthMode,
+  networkAvailable,
   onDepthPress,
+  vessels,
+  vesselsVisible,
+  onVesselPress,
 }: BaseMapProps) {
   const cameraRef = useRef<ComponentRef<typeof Mapbox.Camera>>(null);
   const mapViewRef = useRef<ComponentRef<typeof Mapbox.MapView>>(null);
@@ -149,9 +163,13 @@ export default function BaseMap({
   const windAnimationEnabled = windVisible && shouldRenderWindParticles(zoom);
   const { field: windField } = useWindField(
     windRegion,
-    windAnimationEnabled,
+    windAnimationEnabled && networkAvailable,
     zoom,
   );
+  const windRenderingEnabled =
+    windAnimationEnabled &&
+    (networkAvailable ||
+      Boolean(windField && windFieldContainsRegion(windField, windRegion)));
 
   useEffect(() => {
     if (!mapRegion || restoredRegion.current) {
@@ -205,11 +223,24 @@ export default function BaseMap({
       logoEnabled
       onMapIdle={handleMapIdle}
       onPress={async (feature) => {
+        const vesselFeatures =
+          await mapViewRef.current?.queryRenderedFeaturesAtPoint(
+            [feature.properties.screenPointX, feature.properties.screenPointY],
+            [],
+            [VESSEL_HIT_LAYER_ID, VESSEL_MARKER_LAYER_ID],
+          );
+        const mmsi = vesselFeatures?.features[0]?.properties?.mmsi;
+        if (typeof mmsi === 'string') {
+          onVesselPress(mmsi);
+          return;
+        }
+
         const pressZoom = (await mapViewRef.current?.getZoom()) ?? zoom;
 
         if (
           depthVisible &&
           depthMode === 'bathymetry' &&
+          networkAvailable &&
           pressZoom >= MIN_DEPTH_RASTER_ZOOM
         ) {
           onDepthPress(
@@ -331,9 +362,41 @@ export default function BaseMap({
         field={windField}
         mapStyle={mapStyle}
         region={windRegion}
-        visible={windAnimationEnabled}
+        visible={windRenderingEnabled}
         zoom={zoom}
       />
+      <Mapbox.ShapeSource
+        id={VESSEL_SOURCE_ID}
+        shape={vesselsToGeoJson(vessels)}
+      >
+        <Mapbox.CircleLayer
+          id={VESSEL_HIT_LAYER_ID}
+          style={{
+            circleColor: '#38bdf8',
+            circleOpacity: 0.24,
+            circleRadius: 12,
+            circleStrokeColor: '#082f49',
+            circleStrokeWidth: 1,
+            visibility: vesselsVisible ? 'visible' : 'none',
+          }}
+        />
+        <Mapbox.SymbolLayer
+          id={VESSEL_MARKER_LAYER_ID}
+          style={
+            {
+              textAllowOverlap: true,
+              textColor: '#075985',
+              textField: '▲',
+              textHaloColor: '#f0f9ff',
+              textHaloWidth: 1.5,
+              textRotate: ['get', 'rotation'],
+              textRotationAlignment: 'map',
+              textSize: 17,
+              visibility: vesselsVisible ? 'visible' : 'none',
+            } as SymbolLayerStyle
+          }
+        />
+      </Mapbox.ShapeSource>
     </Mapbox.MapView>
   );
 }
