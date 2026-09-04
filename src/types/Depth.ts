@@ -1,18 +1,12 @@
 import type { Coordinates } from './Location';
 
 export type WaterProviderId = 'rijkswaterstaat';
+export type DepthSampleSource = 'inland-1m' | 'coastal-20m';
 
-export interface DepthZone {
+export interface DepthSample {
   id: string;
-  boundary: Coordinates[];
-  labelCoordinates: Coordinates;
-  depthMeters: number;
+  coordinates: Coordinates;
+  bottomElevationMetersNap: number;
   measuredAt: string | null;
-}
-
-export interface DepthData {
-  zones: DepthZone[];
-  provider: WaterProviderId;
-  fetchedAt: string;
-  isCached: boolean;
+  source: DepthSampleSource;
 }

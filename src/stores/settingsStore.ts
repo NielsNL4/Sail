@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
-import type { MapStyleId, WindColorMode } from '@/types';
+import type { DepthMode, MapStyleId, WindColorMode } from '@/types';
 
 export type WindSpeedUnit = 'knots' | 'beaufort' | 'metersPerSecond';
 export type DistanceUnit = 'nauticalMiles' | 'kilometers';
@@ -14,11 +14,13 @@ interface SettingsState {
   temperatureUnit: TemperatureUnit;
   mapStyle: MapStyleId;
   windColorMode: WindColorMode;
+  depthMode: DepthMode;
   setWindSpeedUnit: (unit: WindSpeedUnit) => void;
   setDistanceUnit: (unit: DistanceUnit) => void;
   setTemperatureUnit: (unit: TemperatureUnit) => void;
   setMapStyle: (mapStyle: MapStyleId) => void;
   setWindColorMode: (windColorMode: WindColorMode) => void;
+  setDepthMode: (depthMode: DepthMode) => void;
   resetSettings: () => void;
 }
 
@@ -28,6 +30,7 @@ const defaultSettings = {
   temperatureUnit: 'celsius' as const,
   mapStyle: 'modern' as const,
   windColorMode: 'speed' as const,
+  depthMode: 'enc' as const,
 };
 
 export const useSettingsStore = create<SettingsState>()(
@@ -39,6 +42,7 @@ export const useSettingsStore = create<SettingsState>()(
       setTemperatureUnit: (temperatureUnit) => set({ temperatureUnit }),
       setMapStyle: (mapStyle) => set({ mapStyle }),
       setWindColorMode: (windColorMode) => set({ windColorMode }),
+      setDepthMode: (depthMode) => set({ depthMode }),
       resetSettings: () => set(defaultSettings),
     }),
     {
@@ -50,12 +54,14 @@ export const useSettingsStore = create<SettingsState>()(
         temperatureUnit,
         mapStyle,
         windColorMode,
+        depthMode,
       }) => ({
         windSpeedUnit,
         distanceUnit,
         temperatureUnit,
         mapStyle,
         windColorMode,
+        depthMode,
       }),
     },
   ),

@@ -80,8 +80,20 @@ is not required for the current local development workflow.
   viewport are recycled. The active field refreshes every 15 minutes. Wind
   colors can show speed or use a high-contrast palette selected for the active
   basemap.
-- Bathymetry uses Rijkswaterstaat's `bodemhoogte_20mtr` WMS and is published in
-  metres relative to NAP under CC0.
+- The depth overlay has two persisted, mutually exclusive Rijkswaterstaat CC0
+  modes. `Nautische ENC` shows only Inland ENC Maritime Chart Service layer `2`
+  (`Depths, currents, etc`). `Bodemhoogte NAP` shows the nationwide
+  `bodemhoogte_20mtr` WMS from zoom 8 through 11 and switches exclusively to the
+  February 2026 `bodemhoogte_1mtr_202602` snapshot from zoom 12. The dated 1 m
+  layer must be updated when Rijkswaterstaat publishes a newer snapshot.
+- WMS sources request and declare 512 px tiles. Raster fading is disabled so a
+  stale parent tile cannot overlap the active resolution during zoom changes.
+  Automatic viewport sampling, generated sounding labels, and persisted depth
+  viewport data are intentionally omitted to keep network traffic bounded.
+- In bathymetry mode, tapping the visible layer makes one non-retried WMS
+  GetFeatureInfo request against the resolution shown at the current zoom and
+  reports bottom elevation in metres relative to NAP. Point inspection is not
+  available in ENC mode to avoid mixing NAP measurements with chart-datum data.
 
 Bathymetry is historic measured bottom elevation, not live navigable depth. It
 must not be used without current water level, chart datum, vessel draft, and

@@ -15,7 +15,7 @@ import {
   regionToZoom,
   shouldRenderWindParticles,
 } from '@/components/maps';
-import { useLocation, useWeather } from '@/hooks';
+import { useDepthInspection, useLocation, useWeather } from '@/hooks';
 import { strings } from '@/i18n';
 import {
   useLayersStore,
@@ -23,7 +23,7 @@ import {
   useSettingsStore,
   useWindFieldStore,
 } from '@/stores';
-import type { MapStyleId, WindColorMode } from '@/types';
+import type { DepthMode, MapStyleId, WindColorMode } from '@/types';
 import {
   directionToCompass,
   DUTCH_WATERS_REGION,
@@ -60,6 +60,11 @@ const mapStyles: {
 const windColorModes: { id: WindColorMode; label: string }[] = [
   { id: 'speed', label: strings.windSpeedColors },
   { id: 'contrast', label: strings.windContrastColor },
+];
+
+const depthModes: { id: DepthMode; label: string }[] = [
+  { id: 'enc', label: strings.depthModeEnc },
+  { id: 'bathymetry', label: strings.depthModeBathymetry },
 ];
 
 function LayerButton({ icon, label, selected, onPress }: LayerButtonProps) {
@@ -104,6 +109,8 @@ export function MapScreen() {
   const setMapStyle = useSettingsStore((state) => state.setMapStyle);
   const windColorMode = useSettingsStore((state) => state.windColorMode);
   const setWindColorMode = useSettingsStore((state) => state.setWindColorMode);
+  const depthMode = useSettingsStore((state) => state.depthMode);
+  const setDepthMode = useSettingsStore((state) => state.setDepthMode);
   const mapRegion = useLocationStore((state) => state.mapRegion);
   const mapZoom = useLocationStore((state) => state.mapZoom);
   const windField = useWindFieldStore((state) => state.field);
@@ -135,6 +142,13 @@ export function MapScreen() {
   const effectiveMapZoom =
     mapZoom ?? regionToZoom(mapRegion ?? DUTCH_WATERS_REGION);
   const windAnimationAvailable = shouldRenderWindParticles(effectiveMapZoom);
+  const {
+    selectedSample,
+    isInspecting,
+    inspectionError,
+    inspectDepth,
+    clearDepthInspection,
+  } = useDepthInspection();
 
   const handleLocatePress = async () => {
     const nextLocation = await requestLocation();
@@ -158,10 +172,12 @@ export function MapScreen() {
   return (
     <View style={styles.container}>
       <BaseMap
+        depthMode={depthMode}
         focusRequestId={focusRequestId}
         initialRegion={DUTCH_WATERS_REGION}
         location={location}
         locationTitle={locationTitle}
+        onDepthPress={inspectDepth}
       />
 
       <View
@@ -171,7 +187,12 @@ export function MapScreen() {
           <LayerButton
             icon="water-outline"
             label={strings.bathymetryLayer}
-            onPress={() => toggleLayer('depth')}
+            onPress={() => {
+              if (depthVisible) {
+                clearDepthInspection();
+              }
+              toggleLayer('depth');
+            }}
             selected={depthVisible}
           />
           <LayerButton
@@ -302,9 +323,81 @@ export function MapScreen() {
         ) : null}
 
         {depthVisible ? (
-          <Text style={styles.bathymetryNotice}>
-            {strings.bathymetryNotice}
-          </Text>
+          <View style={styles.depthPanel}>
+            <View style={styles.depthModes}>
+              {depthModes.map((mode) => {
+                const selected = mode.id === depthMode;
+
+                return (
+                  <Pressable
+                    accessibilityLabel={`${strings.depthMode}: ${mode.label}`}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected }}
+                    key={mode.id}
+                    onPress={() => {
+                      clearDepthInspection();
+                      setDepthMode(mode.id);
+                    }}
+                    style={({ pressed }) => [
+                      styles.depthModeButton,
+                      selected && styles.depthModeButtonSelected,
+                      pressed && styles.layerButtonPressed,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.depthModeText,
+                        selected && styles.depthModeTextSelected,
+                      ]}
+                    >
+                      {mode.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <Text style={styles.depthSource}>
+              {depthMode === 'enc'
+                ? strings.depthSourceEnc
+                : strings.depthSourceBathymetry}
+            </Text>
+            {effectiveMapZoom < 8 ? (
+              <Text style={styles.depthStatus}>{strings.depthZoomIn}</Text>
+            ) : null}
+            {depthMode === 'bathymetry' && isInspecting ? (
+              <View style={styles.loadingRow}>
+                <ActivityIndicator color="#0c4a6e" size="small" />
+                <Text style={styles.depthStatus}>
+                  {strings.depthInspecting}
+                </Text>
+              </View>
+            ) : depthMode === 'bathymetry' && selectedSample ? (
+              <>
+                <Text style={styles.selectedDepth}>
+                  {strings.depthSelected(
+                    selectedSample.bottomElevationMetersNap
+                      .toFixed(1)
+                      .replace('.', ','),
+                  )}
+                </Text>
+                <Text style={styles.selectedDepthPosition}>
+                  {strings.depthSelectedPosition(
+                    selectedSample.coordinates.latitude,
+                    selectedSample.coordinates.longitude,
+                  )}
+                </Text>
+              </>
+            ) : depthMode === 'bathymetry' && inspectionError ? (
+              <Text style={styles.depthError}>{inspectionError}</Text>
+            ) : depthMode === 'bathymetry' && effectiveMapZoom >= 8 ? (
+              <Text style={styles.depthStatus}>{strings.depthTapHint}</Text>
+            ) : null}
+            <Text style={styles.bathymetryNotice}>
+              {depthMode === 'enc'
+                ? strings.encNotice
+                : strings.bathymetryNotice}
+            </Text>
+          </View>
         ) : null}
       </View>
 
@@ -541,11 +634,69 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 15,
   },
-  bathymetryNotice: {
+  depthPanel: {
     paddingHorizontal: 12,
     paddingVertical: 9,
     borderTopWidth: 1,
     borderTopColor: '#bae6fd',
+  },
+  depthModes: {
+    flexDirection: 'row',
+    gap: 5,
+    marginBottom: 7,
+  },
+  depthModeButton: {
+    minHeight: 30,
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 5,
+    borderWidth: 1,
+    borderColor: '#7dd3fc',
+    borderRadius: 8,
+    backgroundColor: '#f0f9ff',
+  },
+  depthModeButtonSelected: {
+    borderColor: '#0369a1',
+    backgroundColor: '#0369a1',
+  },
+  depthModeText: {
+    color: '#075985',
+    fontSize: 10,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  depthModeTextSelected: {
+    color: '#f0f9ff',
+  },
+  depthSource: {
+    marginBottom: 5,
+    color: '#075985',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  depthStatus: {
+    color: '#475569',
+    fontSize: 10,
+    lineHeight: 14,
+  },
+  selectedDepth: {
+    marginTop: 4,
+    color: '#082f49',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  selectedDepthPosition: {
+    color: '#475569',
+    fontSize: 10,
+  },
+  depthError: {
+    color: '#b45309',
+    fontSize: 10,
+    lineHeight: 14,
+  },
+  bathymetryNotice: {
+    marginTop: 4,
     color: '#334155',
     fontSize: 11,
     lineHeight: 15,

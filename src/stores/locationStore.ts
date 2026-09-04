@@ -44,9 +44,10 @@ export const useLocationStore = create<LocationState>()(
     {
       name: 'sail-location',
       storage: createJSONStorage(() => AsyncStorage),
-      partialize: ({ location, mapRegion, permissionStatus }) => ({
+      partialize: ({ location, mapRegion, mapZoom, permissionStatus }) => ({
         location,
         mapRegion,
+        mapZoom,
         permissionStatus,
       }),
     },

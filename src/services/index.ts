@@ -24,3 +24,9 @@ export {
   type ApiErrorContext,
   type ApiErrorKind,
 } from './ApiError';
+export {
+  createRijkswaterstaatService,
+  parseDepthSample,
+  rijkswaterstaatService,
+  type RijkswaterstaatService,
+} from './RijkswaterstaatService';

@@ -15,5 +15,5 @@ export type {
   WindVector,
 } from './Weather';
 export type { Waypoint, WaypointCategory } from './Navigation';
-export type { DepthData, DepthZone, WaterProviderId } from './Depth';
-export type { MapStyleId, WindColorMode } from './Map';
+export type { DepthSample, DepthSampleSource, WaterProviderId } from './Depth';
+export type { DepthMode, MapStyleId, WindColorMode } from './Map';

@@ -26,6 +26,7 @@ describe('settingsStore map style persistence', () => {
   it('defaults to the modern nautical style', () => {
     expect(useSettingsStore.getState().mapStyle).toBe('modern');
     expect(useSettingsStore.getState().windColorMode).toBe('speed');
+    expect(useSettingsStore.getState().depthMode).toBe('enc');
   });
 
   it('round-trips the selected map style through storage', async () => {
@@ -58,5 +59,21 @@ describe('settingsStore map style persistence', () => {
     await useSettingsStore.persist.rehydrate();
 
     expect(useSettingsStore.getState().windColorMode).toBe('contrast');
+  });
+
+  it('persists the selected bathymetry mode', async () => {
+    useSettingsStore.getState().setDepthMode('bathymetry');
+    await vi.waitFor(() =>
+      expect(storedValues.has('sail-settings')).toBe(true),
+    );
+    const persistedValue = storedValues.get('sail-settings');
+
+    useSettingsStore.getState().setDepthMode('enc');
+    if (persistedValue) {
+      storedValues.set('sail-settings', persistedValue);
+    }
+    await useSettingsStore.persist.rehydrate();
+
+    expect(useSettingsStore.getState().depthMode).toBe('bathymetry');
   });
 });

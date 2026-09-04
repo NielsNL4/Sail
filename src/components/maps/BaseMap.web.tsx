@@ -6,15 +6,25 @@ import 'mapbox-gl/dist/mapbox-gl.css';
 import { useWindField } from '@/hooks';
 import { strings } from '@/i18n';
 import { useLayersStore, useLocationStore, useSettingsStore } from '@/stores';
-import type { MapStyleId, WindColorMode } from '@/types';
+import type { DepthMode, MapStyleId, WindColorMode } from '@/types';
+import { DEFAULT_MAP_ZOOM } from '@/utils';
 
 import type { BaseMapProps } from './BaseMap.types';
 import {
   BATHYMETRY_ATTRIBUTION,
   BATHYMETRY_BOUNDS,
-  BATHYMETRY_TILE_URL,
-  DEPTH_RASTER_LAYER_ID,
-  DEPTH_SOURCE_ID,
+  COASTAL_BATHYMETRY_TILE_URL,
+  COASTAL_DEPTH_LAYER_ID,
+  COASTAL_DEPTH_SOURCE_ID,
+  ENC_LAYER_ID,
+  ENC_SOURCE_ID,
+  INLAND_BATHYMETRY_TILE_URL,
+  INLAND_DEPTH_LAYER_ID,
+  INLAND_DEPTH_SOURCE_ID,
+  INLAND_ENC_BOUNDS,
+  INLAND_ENC_TILE_URL,
+  MIN_DEPTH_RASTER_ZOOM,
+  MIN_INLAND_DEPTH_RASTER_ZOOM,
   WIND_PARTICLE_LAYER_IDS,
   WIND_SOURCE_ID,
   coordinatesToRegion,
@@ -48,28 +58,87 @@ function registerOverlaySlots(
   map: MapboxMap,
   depthVisible: boolean,
   windVisible: boolean,
+  depthMode: DepthMode,
   mapStyle: MapStyleId,
   colorMode: WindColorMode,
 ) {
-  if (!map.getSource(DEPTH_SOURCE_ID)) {
-    map.addSource(DEPTH_SOURCE_ID, {
+  if (!map.getSource(COASTAL_DEPTH_SOURCE_ID)) {
+    map.addSource(COASTAL_DEPTH_SOURCE_ID, {
       type: 'raster',
-      tiles: [BATHYMETRY_TILE_URL],
-      tileSize: 256,
+      tiles: [COASTAL_BATHYMETRY_TILE_URL],
+      tileSize: 512,
       bounds: BATHYMETRY_BOUNDS,
       attribution: BATHYMETRY_ATTRIBUTION,
     });
   }
 
-  if (!map.getLayer(DEPTH_RASTER_LAYER_ID)) {
+  if (!map.getLayer(COASTAL_DEPTH_LAYER_ID)) {
     map.addLayer({
-      id: DEPTH_RASTER_LAYER_ID,
+      id: COASTAL_DEPTH_LAYER_ID,
       type: 'raster',
-      source: DEPTH_SOURCE_ID,
-      layout: { visibility: depthVisible ? 'visible' : 'none' },
+      source: COASTAL_DEPTH_SOURCE_ID,
+      minzoom: MIN_DEPTH_RASTER_ZOOM,
+      maxzoom: MIN_INLAND_DEPTH_RASTER_ZOOM,
+      layout: {
+        visibility:
+          depthVisible && depthMode === 'bathymetry' ? 'visible' : 'none',
+      },
       paint: {
-        'raster-fade-duration': 150,
-        'raster-opacity': 0.68,
+        'raster-fade-duration': 0,
+        'raster-opacity': 0.62,
+      },
+    });
+  }
+
+  if (!map.getSource(INLAND_DEPTH_SOURCE_ID)) {
+    map.addSource(INLAND_DEPTH_SOURCE_ID, {
+      type: 'raster',
+      tiles: [INLAND_BATHYMETRY_TILE_URL],
+      tileSize: 512,
+      bounds: BATHYMETRY_BOUNDS,
+      attribution: BATHYMETRY_ATTRIBUTION,
+    });
+  }
+
+  if (!map.getLayer(INLAND_DEPTH_LAYER_ID)) {
+    map.addLayer({
+      id: INLAND_DEPTH_LAYER_ID,
+      type: 'raster',
+      source: INLAND_DEPTH_SOURCE_ID,
+      minzoom: MIN_INLAND_DEPTH_RASTER_ZOOM,
+      layout: {
+        visibility:
+          depthVisible && depthMode === 'bathymetry' ? 'visible' : 'none',
+      },
+      paint: {
+        'raster-fade-duration': 0,
+        'raster-opacity': 0.72,
+      },
+    });
+  }
+
+  if (!map.getSource(ENC_SOURCE_ID)) {
+    map.addSource(ENC_SOURCE_ID, {
+      type: 'raster',
+      tiles: [INLAND_ENC_TILE_URL],
+      tileSize: 512,
+      bounds: INLAND_ENC_BOUNDS,
+      attribution: BATHYMETRY_ATTRIBUTION,
+    });
+  }
+
+  if (!map.getLayer(ENC_LAYER_ID)) {
+    map.addLayer({
+      id: ENC_LAYER_ID,
+      type: 'raster',
+      source: ENC_SOURCE_ID,
+      minzoom: MIN_DEPTH_RASTER_ZOOM,
+      layout: {
+        visibility: depthVisible && depthMode === 'enc' ? 'visible' : 'none',
+      },
+      paint: {
+        'raster-fade-duration': 0,
+        'raster-opacity': 0.92,
       },
     });
   }
@@ -127,6 +196,8 @@ export default function BaseMap({
   location,
   focusRequestId,
   locationTitle,
+  depthMode,
+  onDepthPress,
 }: BaseMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapboxMap | null>(null);
@@ -136,9 +207,14 @@ export default function BaseMap({
   const [initialViewport] = useState(
     () => useLocationStore.getState().mapRegion ?? initialRegion,
   );
+  const [initialZoom] = useState(
+    () => useLocationStore.getState().mapZoom ?? regionToZoom(initialViewport),
+  );
   const restoredRegion = useRef(false);
   const depthVisibleRef = useRef(useLayersStore.getState().visibility.depth);
+  const depthModeRef = useRef(depthMode);
   const windVisibleRef = useRef(useLayersStore.getState().visibility.wind);
+  const onDepthPressRef = useRef(onDepthPress);
   const mapRegion = useLocationStore((state) => state.mapRegion);
   const setMapRegion = useLocationStore((state) => state.setMapRegion);
   const setMapZoom = useLocationStore((state) => state.setMapZoom);
@@ -147,7 +223,7 @@ export default function BaseMap({
   const mapStyleId = useSettingsStore((state) => state.mapStyle);
   const windColorMode = useSettingsStore((state) => state.windColorMode);
   const windRegion = mapRegion ?? initialRegion;
-  const [zoom, setZoom] = useState(() => regionToZoom(initialViewport));
+  const [zoom, setZoom] = useState(initialZoom);
   const windAnimationEnabled = windVisible && shouldRenderWindParticles(zoom);
   const { field: windField } = useWindField(
     windRegion,
@@ -166,7 +242,7 @@ export default function BaseMap({
       container: containerRef.current,
       style: getMapStyleUrl(useSettingsStore.getState().mapStyle),
       center: [viewport.longitude, viewport.latitude],
-      zoom: regionToZoom(viewport),
+      zoom: initialZoom,
       minZoom: 5,
       maxZoom: 18,
       pitch: 0,
@@ -196,6 +272,7 @@ export default function BaseMap({
         map,
         depthVisibleRef.current,
         windVisibleRef.current,
+        depthModeRef.current,
         useSettingsStore.getState().mapStyle,
         useSettingsStore.getState().windColorMode,
       );
@@ -216,6 +293,21 @@ export default function BaseMap({
         ),
       );
     });
+    map.on('click', ({ lngLat }) => {
+      if (
+        depthVisibleRef.current &&
+        depthModeRef.current === 'bathymetry' &&
+        map.getZoom() >= MIN_DEPTH_RASTER_ZOOM
+      ) {
+        onDepthPressRef.current(
+          {
+            latitude: lngLat.lat,
+            longitude: lngLat.lng,
+          },
+          map.getZoom(),
+        );
+      }
+    });
     mapRef.current = map;
 
     return () => {
@@ -224,7 +316,11 @@ export default function BaseMap({
       mapRef.current = null;
       map.remove();
     };
-  }, [initialRegion, initialViewport, setMapRegion, setMapZoom]);
+  }, [initialRegion, initialViewport, initialZoom, setMapRegion, setMapZoom]);
+
+  useEffect(() => {
+    onDepthPressRef.current = onDepthPress;
+  }, [onDepthPress]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -247,7 +343,7 @@ export default function BaseMap({
 
     map.jumpTo({
       center: [mapRegion.longitude, mapRegion.latitude],
-      zoom: regionToZoom(mapRegion),
+      zoom: useLocationStore.getState().mapZoom ?? regionToZoom(mapRegion),
       pitch: 0,
     });
     restoredRegion.current = true;
@@ -262,7 +358,7 @@ export default function BaseMap({
 
     map.flyTo({
       center: [location.coordinates.longitude, location.coordinates.latitude],
-      zoom: 13,
+      zoom: DEFAULT_MAP_ZOOM,
       pitch: 0,
       duration: 600,
     });
@@ -298,16 +394,30 @@ export default function BaseMap({
 
   useEffect(() => {
     depthVisibleRef.current = depthVisible;
+    depthModeRef.current = depthMode;
     const map = mapRef.current;
 
-    if (map?.getLayer(DEPTH_RASTER_LAYER_ID)) {
+    if (!map?.isStyleLoaded()) {
+      return;
+    }
+
+    for (const layerId of [COASTAL_DEPTH_LAYER_ID, INLAND_DEPTH_LAYER_ID]) {
+      if (map.getLayer(layerId)) {
+        map.setLayoutProperty(
+          layerId,
+          'visibility',
+          depthVisible && depthMode === 'bathymetry' ? 'visible' : 'none',
+        );
+      }
+    }
+    if (map.getLayer(ENC_LAYER_ID)) {
       map.setLayoutProperty(
-        DEPTH_RASTER_LAYER_ID,
+        ENC_LAYER_ID,
         'visibility',
-        depthVisible ? 'visible' : 'none',
+        depthVisible && depthMode === 'enc' ? 'visible' : 'none',
       );
     }
-  }, [depthVisible]);
+  }, [depthMode, depthVisible, styleReady]);
 
   useEffect(() => {
     windVisibleRef.current = windVisible;

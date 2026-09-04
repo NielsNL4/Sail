@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
+import { DEFAULT_MAP_ZOOM, DUTCH_WATERS_REGION } from '../../utils/constants';
 import {
-  BATHYMETRY_TILE_URL,
+  COASTAL_BATHYMETRY_TILE_URL,
+  INLAND_BATHYMETRY_TILE_URL,
+  INLAND_ENC_TILE_URL,
   coordinatesToRegion,
   getMapStyleUrl,
   regionToZoom,
@@ -35,6 +38,10 @@ describe('regionToZoom', () => {
 
     expect(narrowZoom).toBeGreaterThan(wideZoom);
   });
+
+  it('uses the marine overview zoom for a first launch', () => {
+    expect(regionToZoom(DUTCH_WATERS_REGION)).toBe(DEFAULT_MAP_ZOOM);
+  });
 });
 
 describe('getMapStyleUrl', () => {
@@ -60,10 +67,34 @@ describe('coordinatesToRegion', () => {
 
 describe('Rijkswaterstaat bathymetry', () => {
   it('uses the official WMS layer with a Mapbox tile bounding box', () => {
-    expect(BATHYMETRY_TILE_URL).toContain(
+    expect(COASTAL_BATHYMETRY_TILE_URL).toContain(
       'geo.rijkswaterstaat.nl/services/ogc/gdr/bodemhoogte_20mtr',
     );
-    expect(BATHYMETRY_TILE_URL).toContain('LAYERS=bodemhoogte_20mtr');
-    expect(BATHYMETRY_TILE_URL).toContain('BBOX={bbox-epsg-3857}');
+    expect(COASTAL_BATHYMETRY_TILE_URL).toContain('LAYERS=bodemhoogte_20mtr');
+    expect(COASTAL_BATHYMETRY_TILE_URL).toContain('BBOX={bbox-epsg-3857}');
+  });
+
+  it('uses the latest published 1 m inland snapshot', () => {
+    expect(INLAND_BATHYMETRY_TILE_URL).toContain(
+      'LAYERS=bodemhoogte_1mtr_202602',
+    );
+  });
+
+  it('configures the official Inland ENC maritime WMS', () => {
+    expect(INLAND_ENC_TILE_URL).toContain('/ENC/mcs_inland/');
+    expect(INLAND_ENC_TILE_URL).toContain('LAYERS=2');
+    expect(INLAND_ENC_TILE_URL).toContain('TRANSPARENT=TRUE');
+    expect(INLAND_ENC_TILE_URL).toContain('BBOX={bbox-epsg-3857}');
+  });
+
+  it('requests blank images instead of XML WMS exceptions', () => {
+    for (const url of [
+      COASTAL_BATHYMETRY_TILE_URL,
+      INLAND_BATHYMETRY_TILE_URL,
+      INLAND_ENC_TILE_URL,
+    ]) {
+      expect(url).toContain('EXCEPTIONS=application/vnd.ogc.se_blank');
+      expect(url).toContain('WIDTH=512&HEIGHT=512');
+    }
   });
 });

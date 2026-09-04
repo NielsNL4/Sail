@@ -18,7 +18,7 @@ export const strings = {
   windColors: 'Windkleuren',
   windSpeedColors: 'Windsnelheid',
   windContrastColor: 'Hoog contrast',
-  bathymetryLayer: 'Bodem',
+  bathymetryLayer: 'Diepte',
   mapStyle: 'Kaartstijl',
   modernMapStyle: 'Nautisch',
   traditionalMapStyle: 'Klassiek',
@@ -32,6 +32,20 @@ export const strings = {
   windFieldLoading: 'Windstromen laden...',
   windFieldUnavailable: 'Windanimatie is tijdelijk niet beschikbaar.',
   windFieldStale: 'Windanimatie gebruikt eerder geladen gegevens.',
+  depthMode: 'Diepteweergave',
+  depthModeEnc: 'Nautische ENC',
+  depthModeBathymetry: 'Bodemhoogte NAP',
+  depthSourceEnc: 'RWS Inland ENC',
+  depthSourceBathymetry: 'RWS bodemhoogte 1 m / 20 m',
+  encNotice:
+    'Officiële nautische kaartinformatie. Controleer altijd de geldende kaart en waterstand.',
   bathymetryNotice:
-    'Bodemhoogte t.o.v. NAP van Rijkswaterstaat. Niet gebruiken als actuele vaardiepte.',
+    'Gemeten bodemhoogte ten opzichte van NAP, geen actuele vaardiepte.',
+  depthZoomIn: 'Zoom verder in om de dieptelaag te zien.',
+  depthTapHint: 'Tik op de kaart voor de bodemhoogte op die positie.',
+  depthInspecting: 'Bodemhoogte opvragen...',
+  depthPointUnavailable: 'Geen bodemhoogte gevonden op deze positie.',
+  depthSelected: (elevation: string) => `Bodemhoogte: ${elevation} m NAP`,
+  depthSelectedPosition: (latitude: number, longitude: number) =>
+    `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`,
 } as const;

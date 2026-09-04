@@ -1,5 +1,9 @@
 export { distanceInNauticalMiles, initialBearingDegrees } from './coordinates';
-export { DUTCH_WATERS_REGION } from './constants';
+export {
+  DEFAULT_MAP_ZOOM,
+  DEPTH_DETAIL_ZOOM,
+  DUTCH_WATERS_REGION,
+} from './constants';
 export {
   directionToCompass,
   formatTemperature,

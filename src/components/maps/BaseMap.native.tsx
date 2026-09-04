@@ -6,14 +6,24 @@ import { useWindField } from '@/hooks';
 import { strings } from '@/i18n';
 import { useLayersStore, useLocationStore, useSettingsStore } from '@/stores';
 import type { MapRegion, MapStyleId, WindColorMode, WindField } from '@/types';
+import { DEFAULT_MAP_ZOOM } from '@/utils';
 
 import type { BaseMapProps } from './BaseMap.types';
 import {
   BATHYMETRY_ATTRIBUTION,
   BATHYMETRY_BOUNDS,
-  BATHYMETRY_TILE_URL,
-  DEPTH_RASTER_LAYER_ID,
-  DEPTH_SOURCE_ID,
+  COASTAL_BATHYMETRY_TILE_URL,
+  COASTAL_DEPTH_LAYER_ID,
+  COASTAL_DEPTH_SOURCE_ID,
+  ENC_LAYER_ID,
+  ENC_SOURCE_ID,
+  INLAND_BATHYMETRY_TILE_URL,
+  INLAND_DEPTH_LAYER_ID,
+  INLAND_DEPTH_SOURCE_ID,
+  INLAND_ENC_BOUNDS,
+  INLAND_ENC_TILE_URL,
+  MIN_DEPTH_RASTER_ZOOM,
+  MIN_INLAND_DEPTH_RASTER_ZOOM,
   WIND_PARTICLE_LAYER_IDS,
   WIND_SOURCE_ID,
   coordinatesToRegion,
@@ -115,12 +125,18 @@ export default function BaseMap({
   location,
   focusRequestId,
   locationTitle,
+  depthMode,
+  onDepthPress,
 }: BaseMapProps) {
   const cameraRef = useRef<ComponentRef<typeof Mapbox.Camera>>(null);
+  const mapViewRef = useRef<ComponentRef<typeof Mapbox.MapView>>(null);
   const [initialViewport] = useState(
     () => useLocationStore.getState().mapRegion ?? initialRegion,
   );
-  const [zoom, setZoom] = useState(() => regionToZoom(initialViewport));
+  const [initialZoom] = useState(
+    () => useLocationStore.getState().mapZoom ?? regionToZoom(initialViewport),
+  );
+  const [zoom, setZoom] = useState(initialZoom);
   const restoredRegion = useRef(false);
   const mapRegion = useLocationStore((state) => state.mapRegion);
   const setMapRegion = useLocationStore((state) => state.setMapRegion);
@@ -144,7 +160,7 @@ export default function BaseMap({
 
     cameraRef.current?.setCamera({
       centerCoordinate: [mapRegion.longitude, mapRegion.latitude],
-      zoomLevel: regionToZoom(mapRegion),
+      zoomLevel: useLocationStore.getState().mapZoom ?? regionToZoom(mapRegion),
       pitch: 0,
       animationDuration: 0,
     });
@@ -161,7 +177,7 @@ export default function BaseMap({
         location.coordinates.longitude,
         location.coordinates.latitude,
       ],
-      zoomLevel: 13,
+      zoomLevel: DEFAULT_MAP_ZOOM,
       pitch: 0,
       animationDuration: 600,
     });
@@ -188,6 +204,23 @@ export default function BaseMap({
       compassEnabled
       logoEnabled
       onMapIdle={handleMapIdle}
+      onPress={async (feature) => {
+        const pressZoom = (await mapViewRef.current?.getZoom()) ?? zoom;
+
+        if (
+          depthVisible &&
+          depthMode === 'bathymetry' &&
+          pressZoom >= MIN_DEPTH_RASTER_ZOOM
+        ) {
+          onDepthPress(
+            {
+              latitude: feature.geometry.coordinates[1],
+              longitude: feature.geometry.coordinates[0],
+            },
+            pressZoom,
+          );
+        }
+      }}
       pitchEnabled={false}
       projection="mercator"
       rotateEnabled
@@ -196,6 +229,7 @@ export default function BaseMap({
       scrollEnabled
       style={StyleSheet.absoluteFill}
       styleURL={getMapStyleUrl(mapStyle)}
+      ref={mapViewRef}
       zoomEnabled
     >
       <Mapbox.Camera
@@ -205,7 +239,7 @@ export default function BaseMap({
             initialViewport.longitude,
             initialViewport.latitude,
           ],
-          zoomLevel: regionToZoom(initialViewport),
+          zoomLevel: initialZoom,
           pitch: 0,
         }}
         maxZoomLevel={18}
@@ -233,19 +267,62 @@ export default function BaseMap({
 
       <Mapbox.RasterSource
         attribution={BATHYMETRY_ATTRIBUTION}
-        id={DEPTH_SOURCE_ID}
+        id={COASTAL_DEPTH_SOURCE_ID}
         maxZoomLevel={18}
         minZoomLevel={5}
         sourceBounds={BATHYMETRY_BOUNDS}
-        tileSize={256}
-        tileUrlTemplates={[BATHYMETRY_TILE_URL]}
+        tileSize={512}
+        tileUrlTemplates={[COASTAL_BATHYMETRY_TILE_URL]}
       >
         <Mapbox.RasterLayer
-          id={DEPTH_RASTER_LAYER_ID}
+          id={COASTAL_DEPTH_LAYER_ID}
+          maxZoomLevel={MIN_INLAND_DEPTH_RASTER_ZOOM}
+          minZoomLevel={MIN_DEPTH_RASTER_ZOOM}
           style={{
-            rasterFadeDuration: 150,
-            rasterOpacity: 0.68,
-            visibility: depthVisible ? 'visible' : 'none',
+            rasterFadeDuration: 0,
+            rasterOpacity: 0.62,
+            visibility:
+              depthVisible && depthMode === 'bathymetry' ? 'visible' : 'none',
+          }}
+        />
+      </Mapbox.RasterSource>
+      <Mapbox.RasterSource
+        attribution={BATHYMETRY_ATTRIBUTION}
+        id={INLAND_DEPTH_SOURCE_ID}
+        maxZoomLevel={18}
+        minZoomLevel={5}
+        sourceBounds={BATHYMETRY_BOUNDS}
+        tileSize={512}
+        tileUrlTemplates={[INLAND_BATHYMETRY_TILE_URL]}
+      >
+        <Mapbox.RasterLayer
+          id={INLAND_DEPTH_LAYER_ID}
+          minZoomLevel={MIN_INLAND_DEPTH_RASTER_ZOOM}
+          style={{
+            rasterFadeDuration: 0,
+            rasterOpacity: 0.72,
+            visibility:
+              depthVisible && depthMode === 'bathymetry' ? 'visible' : 'none',
+          }}
+        />
+      </Mapbox.RasterSource>
+      <Mapbox.RasterSource
+        attribution={BATHYMETRY_ATTRIBUTION}
+        id={ENC_SOURCE_ID}
+        maxZoomLevel={18}
+        minZoomLevel={5}
+        sourceBounds={INLAND_ENC_BOUNDS}
+        tileSize={512}
+        tileUrlTemplates={[INLAND_ENC_TILE_URL]}
+      >
+        <Mapbox.RasterLayer
+          id={ENC_LAYER_ID}
+          minZoomLevel={MIN_DEPTH_RASTER_ZOOM}
+          style={{
+            rasterFadeDuration: 0,
+            rasterOpacity: 0.92,
+            visibility:
+              depthVisible && depthMode === 'enc' ? 'visible' : 'none',
           }}
         />
       </Mapbox.RasterSource>

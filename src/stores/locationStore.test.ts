@@ -19,7 +19,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 describe('locationStore map region persistence', () => {
   beforeEach(async () => {
     storedValues.clear();
-    useLocationStore.setState({ mapRegion: null });
+    useLocationStore.setState({ mapRegion: null, mapZoom: null });
     await useLocationStore.persist.clearStorage();
   });
 
@@ -30,19 +30,22 @@ describe('locationStore map region persistence', () => {
       latitudeDelta: 0.5,
       longitudeDelta: 0.75,
     };
+    const zoom = 13.25;
 
     useLocationStore.getState().setMapRegion(region);
+    useLocationStore.getState().setMapZoom(zoom);
     await vi.waitFor(() =>
       expect(storedValues.has('sail-location')).toBe(true),
     );
     const persistedValue = storedValues.get('sail-location');
 
-    useLocationStore.setState({ mapRegion: null });
+    useLocationStore.setState({ mapRegion: null, mapZoom: null });
     if (persistedValue) {
       storedValues.set('sail-location', persistedValue);
     }
     await useLocationStore.persist.rehydrate();
 
     expect(useLocationStore.getState().mapRegion).toEqual(region);
+    expect(useLocationStore.getState().mapZoom).toBe(zoom);
   });
 });

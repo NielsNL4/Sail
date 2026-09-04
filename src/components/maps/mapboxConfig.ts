@@ -1,5 +1,7 @@
 import type { MapRegion, MapStyleId } from '@/types';
 
+import { DEPTH_DETAIL_ZOOM } from '../../utils/constants';
+
 const MAPBOX_STYLE_URLS: Record<MapStyleId, string> = {
   modern:
     process.env.EXPO_PUBLIC_MAPBOX_STYLE_MODERN ??
@@ -12,16 +14,28 @@ const MAPBOX_STYLE_URLS: Record<MapStyleId, string> = {
     'mapbox://styles/mapbox/navigation-night-v1',
   satellite: 'mapbox://styles/mapbox/satellite-streets-v12',
 };
-export const DEPTH_SOURCE_ID = 'sail-depth-source';
-export const DEPTH_RASTER_LAYER_ID = 'sail-depth-raster';
+export const COASTAL_DEPTH_SOURCE_ID = 'sail-coastal-depth-source';
+export const COASTAL_DEPTH_LAYER_ID = 'sail-coastal-depth-raster';
+export const INLAND_DEPTH_SOURCE_ID = 'sail-inland-depth-source';
+export const INLAND_DEPTH_LAYER_ID = 'sail-inland-depth-raster';
+export const ENC_SOURCE_ID = 'sail-inland-enc-source';
+export const ENC_LAYER_ID = 'sail-inland-enc-raster';
+export const MIN_DEPTH_RASTER_ZOOM = 8;
+export const MIN_INLAND_DEPTH_RASTER_ZOOM = DEPTH_DETAIL_ZOOM;
 export const WIND_SOURCE_ID = 'sail-wind-source';
 export const WIND_PARTICLE_LAYER_IDS = [0, 1, 2, 3].map(
   (bucket) => `sail-wind-particles-${bucket}`,
 );
-export const BATHYMETRY_ATTRIBUTION = 'Rijkswaterstaat bathymetrie (CC0)';
+export const BATHYMETRY_ATTRIBUTION =
+  'Rijkswaterstaat bathymetrie en Inland ENC (CC0)';
 export const BATHYMETRY_BOUNDS = [2.53, 50.67, 7.28, 55.77];
-export const BATHYMETRY_TILE_URL =
-  'https://geo.rijkswaterstaat.nl/services/ogc/gdr/bodemhoogte_20mtr/ows?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=bodemhoogte_20mtr&STYLES=&FORMAT=image/png&TRANSPARENT=TRUE&CRS=EPSG:3857&WIDTH=256&HEIGHT=256&BBOX={bbox-epsg-3857}';
+export const INLAND_ENC_BOUNDS = [3.133333, 50.757502, 7.216667, 53.6];
+export const COASTAL_BATHYMETRY_TILE_URL =
+  'https://geo.rijkswaterstaat.nl/services/ogc/gdr/bodemhoogte_20mtr/ows?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=bodemhoogte_20mtr&STYLES=&FORMAT=image/png&TRANSPARENT=TRUE&EXCEPTIONS=application/vnd.ogc.se_blank&CRS=EPSG:3857&WIDTH=512&HEIGHT=512&BBOX={bbox-epsg-3857}';
+export const INLAND_BATHYMETRY_TILE_URL =
+  'https://geo.rijkswaterstaat.nl/services/ogc/gdr/bodemhoogte_1mtr_historie/ows?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=bodemhoogte_1mtr_202602&STYLES=&FORMAT=image/png&TRANSPARENT=TRUE&EXCEPTIONS=application/vnd.ogc.se_blank&CRS=EPSG:3857&WIDTH=512&HEIGHT=512&BBOX={bbox-epsg-3857}';
+export const INLAND_ENC_TILE_URL =
+  'https://geo.rijkswaterstaat.nl/arcgis/rest/services/ENC/mcs_inland/MapServer/exts/MaritimeChartService/WMSServer?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=2&STYLES=&FORMAT=image/png&TRANSPARENT=TRUE&EXCEPTIONS=application/vnd.ogc.se_blank&CRS=EPSG:3857&WIDTH=512&HEIGHT=512&BBOX={bbox-epsg-3857}';
 
 export function getMapStyleUrl(style: MapStyleId): string {
   return MAPBOX_STYLE_URLS[style];
