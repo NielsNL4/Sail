@@ -14,7 +14,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
   BaseMap,
+  type CalloutRow,
   LayerMenu,
+  type MapPressPoint,
+  SelectedObjectCallout,
   regionToZoom,
   shouldRenderWindParticles,
 } from '@/components/maps';
@@ -37,7 +40,13 @@ import {
   useWindFieldStore,
 } from '@/stores';
 import { bridgeLockService } from '@/services/BridgeLockService';
-import type { BridgeLock, DepthMode, MapStyleId, WindColorMode } from '@/types';
+import type {
+  BridgeLock,
+  Coordinates,
+  DepthMode,
+  MapStyleId,
+  WindColorMode,
+} from '@/types';
 import {
   directionToCompass,
   DUTCH_WATERS_REGION,
@@ -79,6 +88,20 @@ const depthModes: { id: DepthMode; label: string }[] = [
   { id: 'enc', label: strings.depthModeEnc },
   { id: 'bathymetry', label: strings.depthModeBathymetry },
 ];
+
+type ActiveMapSelection = {
+  coordinates: Coordinates;
+  kind: 'vessel' | 'fairway' | 'marker' | 'bridge' | 'depth';
+  point: MapPressPoint;
+};
+
+interface CalloutContent {
+  accentColor: string;
+  icon: React.ComponentProps<typeof Ionicons>['name'];
+  label: string;
+  rows: CalloutRow[];
+  title: string;
+}
 
 export function MapScreen() {
   const insets = useSafeAreaInsets();
@@ -126,6 +149,9 @@ export function MapScreen() {
   );
   const [selectedMarkerId, setSelectedMarkerId] = useState<string | null>(null);
   const [selectedBridgeId, setSelectedBridgeId] = useState<string | null>(null);
+  const [activeMapSelection, setActiveMapSelection] =
+    useState<ActiveMapSelection | null>(null);
+  const [calloutClosing, setCalloutClosing] = useState(false);
   const [bridges, setBridges] = useState<BridgeLock[]>([]);
   const [bridgeError, setBridgeError] = useState<string | null>(null);
   const {
@@ -230,6 +256,69 @@ export function MapScreen() {
     }
   };
 
+  const handleVesselPress = (
+    mmsi: string,
+    point: MapPressPoint,
+    coordinates: Coordinates,
+  ) => {
+    setCalloutClosing(false);
+    setSelectedVesselMmsi(mmsi);
+    setActiveMapSelection({
+      coordinates: vesselsByMmsi[mmsi]?.coordinates ?? coordinates,
+      kind: 'vessel',
+      point,
+    });
+  };
+
+  const handleFairwayPress = (
+    id: string,
+    point: MapPressPoint,
+    coordinates: Coordinates,
+  ) => {
+    setCalloutClosing(false);
+    setSelectedFairwayId(id);
+    setActiveMapSelection({ coordinates, kind: 'fairway', point });
+  };
+
+  const handleMarkerPress = (
+    id: string,
+    point: MapPressPoint,
+    coordinates: Coordinates,
+  ) => {
+    setCalloutClosing(false);
+    setSelectedMarkerId(id);
+    setActiveMapSelection({
+      coordinates: markersById[id]?.position ?? coordinates,
+      kind: 'marker',
+      point,
+    });
+  };
+
+  const handleBridgePress = (
+    id: string,
+    point: MapPressPoint,
+    coordinates: Coordinates,
+  ) => {
+    setCalloutClosing(false);
+    setSelectedBridgeId(id);
+    setActiveMapSelection({
+      coordinates:
+        bridges.find((bridge) => bridge.id === id)?.position ?? coordinates,
+      kind: 'bridge',
+      point,
+    });
+  };
+
+  const handleDepthPress = (
+    coordinates: Parameters<typeof inspectDepth>[0],
+    zoom: number,
+    point: MapPressPoint,
+  ) => {
+    setCalloutClosing(false);
+    setActiveMapSelection({ coordinates, kind: 'depth', point });
+    void inspectDepth(coordinates, zoom);
+  };
+
   const locationTitle = isMocked
     ? strings.developmentLocation
     : strings.currentLocation;
@@ -254,6 +343,183 @@ export function MapScreen() {
     markersVisible,
     bridgesVisible,
   ].filter(Boolean).length;
+  const calloutAnchor = activeMapSelection
+    ? activeMapSelection.kind === 'vessel' && selectedVessel
+      ? selectedVessel.coordinates
+      : activeMapSelection.kind === 'marker' && selectedMarker
+        ? selectedMarker.position
+        : activeMapSelection.kind === 'bridge' && selectedBridge
+          ? selectedBridge.position
+          : activeMapSelection.coordinates
+    : null;
+  const calloutIsOnScreen = Boolean(
+    activeMapSelection &&
+    activeMapSelection.point.x >= 0 &&
+    activeMapSelection.point.x <= screenWidth &&
+    activeMapSelection.point.y >= 0 &&
+    activeMapSelection.point.y <= screenHeight,
+  );
+  const calloutLayerIsVisible = Boolean(
+    activeMapSelection &&
+    (activeMapSelection.kind !== 'marker' ||
+      (markersVisible && markersAvailableAtZoom)),
+  );
+  const calloutKey = activeMapSelection
+    ? activeMapSelection.kind === 'vessel'
+      ? `vessel-${selectedVesselMmsi}`
+      : activeMapSelection.kind === 'fairway'
+        ? `fairway-${selectedFairwayId}`
+        : activeMapSelection.kind === 'marker'
+          ? `marker-${selectedMarkerId}`
+          : activeMapSelection.kind === 'bridge'
+            ? `bridge-${selectedBridgeId}`
+            : `depth-${activeMapSelection.coordinates.latitude}-${activeMapSelection.coordinates.longitude}`
+    : 'none';
+  let calloutContent: CalloutContent | null = null;
+
+  if (activeMapSelection?.kind === 'vessel' && selectedVessel) {
+    const rows: CalloutRow[] = [{ label: 'MMSI', value: selectedVessel.mmsi }];
+    if (selectedVessel.speedKnots !== null) {
+      rows.push({
+        label: 'Snelheid',
+        value: `${selectedVessel.speedKnots.toFixed(1).replace('.', ',')} kn`,
+      });
+    }
+    if (selectedVessel.courseDegrees !== null) {
+      rows.push({
+        label: 'Koers',
+        value: `${Math.round(selectedVessel.courseDegrees)}°`,
+      });
+    }
+    const shipType = shipTypeLabel(selectedVessel.shipType);
+    if (shipType) rows.push({ label: 'Type', value: shipType });
+    calloutContent = {
+      accentColor: '#0284c7',
+      icon: 'boat-outline',
+      label: strings.vesselCallout,
+      rows,
+      title: selectedVessel.name ?? strings.aisVesselUnknown,
+    };
+  } else if (activeMapSelection?.kind === 'fairway' && selectedFairway) {
+    const rows: CalloutRow[] = [
+      {
+        label: 'Klasse',
+        value:
+          selectedFairway.cemtClass === 'unknown'
+            ? strings.fairwayUnknown
+            : `CEMT ${selectedFairway.cemtClass}`,
+      },
+    ];
+    if (selectedFairway.description) {
+      rows.push({ label: 'Informatie', value: selectedFairway.description });
+    }
+    calloutContent = {
+      accentColor: '#0e7490',
+      icon: 'navigate-outline',
+      label: strings.fairwayCallout,
+      rows,
+      title: selectedFairway.name ?? strings.fairwayUnknown,
+    };
+  } else if (activeMapSelection?.kind === 'marker' && selectedMarker) {
+    const rows: CalloutRow[] = [];
+    if (selectedMarker.number) {
+      rows.push({ label: 'Nummer', value: selectedMarker.number });
+    }
+    if (selectedMarker.waterway) {
+      rows.push({ label: 'Vaarwater', value: selectedMarker.waterway });
+    }
+    if (selectedMarker.color) {
+      rows.push({
+        label: 'Kleur',
+        value: selectedMarker.colorPattern
+          ? `${selectedMarker.color} · ${selectedMarker.colorPattern}`
+          : selectedMarker.color,
+      });
+    }
+    if (selectedMarker.description) {
+      rows.push({ label: 'Informatie', value: selectedMarker.description });
+    }
+    calloutContent = {
+      accentColor: selectedMarker.type === 'buoy' ? '#ea580c' : '#ca8a04',
+      icon:
+        selectedMarker.type === 'buoy' ? 'radio-button-on' : 'diamond-outline',
+      label:
+        selectedMarker.type === 'buoy'
+          ? strings.buoyCallout
+          : strings.beaconCallout,
+      rows,
+      title: selectedMarker.name ?? strings.markerUnknown,
+    };
+  } else if (activeMapSelection?.kind === 'bridge' && selectedBridge) {
+    const rows: CalloutRow[] = [
+      {
+        label: 'Status',
+        value:
+          selectedBridge.liveStatus === 'open'
+            ? 'Live open'
+            : selectedBridge.liveStatus === 'closed'
+              ? 'Gesloten'
+              : 'Onbekend',
+      },
+    ];
+    if (selectedBridge.vhfChannel) {
+      rows.push({ label: 'Marifoon', value: selectedBridge.vhfChannel });
+    }
+    if (selectedBridge.clearanceHeightMeters !== null) {
+      rows.push({
+        label: 'Doorvaart',
+        value: `${selectedBridge.clearanceHeightMeters.toFixed(1).replace('.', ',')} m hoog`,
+      });
+    }
+    if (selectedBridge.scheduledOperatingTimes) {
+      rows.push({
+        label: 'Bediening',
+        value: selectedBridge.scheduledOperatingTimes,
+      });
+    }
+    calloutContent = {
+      accentColor: selectedBridge.liveStatus === 'open' ? '#16a34a' : '#475569',
+      icon:
+        selectedBridge.kind === 'bridge'
+          ? 'git-compare-outline'
+          : 'swap-vertical-outline',
+      label:
+        selectedBridge.kind === 'bridge'
+          ? strings.bridgeCallout
+          : strings.lockCallout,
+      rows,
+      title: selectedBridge.name,
+    };
+  } else if (activeMapSelection?.kind === 'depth') {
+    const rows: CalloutRow[] = [];
+    if (selectedSample) {
+      rows.push({
+        label: 'Hoogte',
+        value: `${selectedSample.bottomElevationMetersNap.toFixed(1).replace('.', ',')} m NAP`,
+      });
+      rows.push({
+        label: 'Positie',
+        value: strings.depthSelectedPosition(
+          selectedSample.coordinates.latitude,
+          selectedSample.coordinates.longitude,
+        ),
+      });
+    } else {
+      rows.push({
+        label: 'Status',
+        value: isInspecting
+          ? strings.depthInspecting
+          : (inspectionError ?? strings.depthPointUnavailable),
+      });
+    }
+    calloutContent = {
+      accentColor: '#0891b2',
+      icon: 'water-outline',
+      label: strings.depthCallout,
+      rows,
+      title: 'Bodemhoogte t.o.v. NAP',
+    };
+  }
 
   useEffect(() => {
     if (!phoneLayout || !layerMenuOpen || typeof document === 'undefined') {
@@ -270,6 +536,7 @@ export function MapScreen() {
   return (
     <View style={styles.container}>
       <BaseMap
+        calloutAnchor={calloutAnchor}
         depthMode={depthMode}
         depthVisible={depthVisible}
         focusRequestId={focusRequestId}
@@ -278,23 +545,51 @@ export function MapScreen() {
         locationTitle={locationTitle}
         mapStyle={mapStyle}
         networkAvailable={!isOffline}
-        onDepthPress={inspectDepth}
-        onVesselPress={setSelectedVesselMmsi}
+        onCalloutPointChange={(point) => {
+          if (!point) return;
+          setActiveMapSelection((selection) =>
+            selection ? { ...selection, point } : null,
+          );
+        }}
+        onDepthPress={handleDepthPress}
+        onMapPress={() => setCalloutClosing(true)}
+        onVesselPress={handleVesselPress}
         vessels={vessels}
         vesselsVisible={vesselsVisible}
         fairways={fairways}
         fairwaysVisible={fairwaysVisible}
         markers={markers}
         markersVisible={markersVisible && markersAvailableAtZoom}
-        onFairwayPress={setSelectedFairwayId}
-        onMarkerPress={setSelectedMarkerId}
+        onFairwayPress={handleFairwayPress}
+        onMarkerPress={handleMarkerPress}
         bridges={bridges}
         bridgesVisible={bridgesVisible}
-        onBridgePress={setSelectedBridgeId}
+        onBridgePress={handleBridgePress}
         vesselProfile={vesselProfile}
         windColorMode={windColorMode}
         windVisible={windVisible}
       />
+
+      {activeMapSelection &&
+      calloutContent &&
+      calloutIsOnScreen &&
+      !layerMenuOpen ? (
+        <SelectedObjectCallout
+          {...calloutContent}
+          closing={calloutClosing || !calloutLayerIsVisible}
+          key={calloutKey}
+          onClosed={() => {
+            setActiveMapSelection(null);
+            setCalloutClosing(false);
+          }}
+          onDismiss={() => setCalloutClosing(true)}
+          point={activeMapSelection.point}
+          safeBottom={insets.bottom}
+          safeTop={insets.top}
+          screenHeight={screenHeight}
+          screenWidth={screenWidth}
+        />
+      ) : null}
 
       {phoneLayout && !layerMenuOpen ? (
         <Pressable
@@ -373,18 +668,33 @@ export function MapScreen() {
             onToggle={(layer) => {
               if (layer === 'depth' && depthVisible) {
                 clearDepthInspection();
+                if (activeMapSelection?.kind === 'depth') {
+                  setActiveMapSelection(null);
+                }
               }
               if (layer === 'vessels' && vesselsVisible) {
                 setSelectedVesselMmsi(null);
+                if (activeMapSelection?.kind === 'vessel') {
+                  setActiveMapSelection(null);
+                }
               }
               if (layer === 'fairway' && fairwaysVisible) {
                 setSelectedFairwayId(null);
+                if (activeMapSelection?.kind === 'fairway') {
+                  setActiveMapSelection(null);
+                }
               }
               if (layer === 'buoys' && markersVisible) {
                 setSelectedMarkerId(null);
+                if (activeMapSelection?.kind === 'marker') {
+                  setActiveMapSelection(null);
+                }
               }
               if (layer === 'bridgesLocks' && bridgesVisible) {
                 setSelectedBridgeId(null);
+                if (activeMapSelection?.kind === 'bridge') {
+                  setActiveMapSelection(null);
+                }
               }
               toggleLayer(layer);
             }}

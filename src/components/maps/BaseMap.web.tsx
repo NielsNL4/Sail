@@ -439,6 +439,8 @@ export default function BaseMap({
   mapStyle: mapStyleId,
   windColorMode,
   networkAvailable,
+  calloutAnchor,
+  onCalloutPointChange,
   onDepthPress,
   vessels,
   vesselsVisible,
@@ -449,6 +451,7 @@ export default function BaseMap({
   markersVisible,
   onFairwayPress,
   onMarkerPress,
+  onMapPress,
   vesselProfile,
   bridges,
   bridgesVisible,
@@ -467,13 +470,9 @@ export default function BaseMap({
     () => useLocationStore.getState().mapZoom ?? regionToZoom(initialViewport),
   );
   const restoredRegion = useRef(false);
-  const onBridgePressRef = useRef(onBridgePress);
   const mapRegion = useLocationStore((state) => state.mapRegion);
   const setMapRegion = useLocationStore((state) => state.setMapRegion);
   const setMapZoom = useLocationStore((state) => state.setMapZoom);
-  useEffect(() => {
-    onBridgePressRef.current = onBridgePress;
-  }, [onBridgePress]);
   const windRegion = mapRegion ?? initialRegion;
   const [zoom, setZoom] = useState(initialZoom);
   const windAnimationEnabled = windVisible && shouldRenderWindParticles(zoom);
@@ -490,6 +489,7 @@ export default function BaseMap({
     (
       coordinates: { latitude: number; longitude: number },
       pressZoom: number,
+      point: { x: number; y: number },
     ) => {
       if (
         depthVisible &&
@@ -497,18 +497,60 @@ export default function BaseMap({
         networkAvailable &&
         pressZoom >= MIN_DEPTH_RASTER_ZOOM
       ) {
-        onDepthPress(coordinates, pressZoom);
+        onDepthPress(coordinates, pressZoom, point);
       }
     },
   );
-  const handleVesselPress = useEffectEvent((mmsi: string) => {
-    onVesselPress(mmsi);
+  const handleVesselPress = useEffectEvent(
+    (
+      mmsi: string,
+      point: { x: number; y: number },
+      coordinates: { latitude: number; longitude: number },
+    ) => {
+      onVesselPress(mmsi, point, coordinates);
+    },
+  );
+  const handleFairwayPress = useEffectEvent(
+    (
+      id: string,
+      point: { x: number; y: number },
+      coordinates: { latitude: number; longitude: number },
+    ) => {
+      onFairwayPress(id, point, coordinates);
+    },
+  );
+  const handleMarkerPress = useEffectEvent(
+    (
+      id: string,
+      point: { x: number; y: number },
+      coordinates: { latitude: number; longitude: number },
+    ) => {
+      onMarkerPress(id, point, coordinates);
+    },
+  );
+  const handleBridgePress = useEffectEvent(
+    (
+      id: string,
+      point: { x: number; y: number },
+      coordinates: { latitude: number; longitude: number },
+    ) => {
+      onBridgePress(id, point, coordinates);
+    },
+  );
+  const handleMapPress = useEffectEvent(() => {
+    onMapPress();
   });
-  const handleFairwayPress = useEffectEvent((id: string) => {
-    onFairwayPress(id);
-  });
-  const handleMarkerPress = useEffectEvent((id: string) => {
-    onMarkerPress(id);
+  const updateCalloutPoint = useEffectEvent((map: MapboxMap) => {
+    if (!calloutAnchor) {
+      onCalloutPointChange(null);
+      return;
+    }
+
+    const point = map.project([
+      calloutAnchor.longitude,
+      calloutAnchor.latitude,
+    ]);
+    onCalloutPointChange({ x: point.x, y: point.y });
   });
   const handleStyleLoad = useEffectEvent((map: MapboxMap) => {
     map.setFog(null);
@@ -588,6 +630,7 @@ export default function BaseMap({
     );
     map.touchPitch.disable();
     map.on('style.load', () => handleStyleLoad(map));
+    map.on('move', () => updateCalloutPoint(map));
     map.on('moveend', () => {
       const center = map.getCenter();
       const bounds = map.getBounds();
@@ -606,12 +649,17 @@ export default function BaseMap({
       );
     });
     map.on('click', (event) => {
+      const point = { x: event.point.x, y: event.point.y };
+      const coordinates = {
+        latitude: event.lngLat.lat,
+        longitude: event.lngLat.lng,
+      };
       const vesselFeature = map.queryRenderedFeatures(event.point, {
         layers: [VESSEL_HIT_LAYER_ID, VESSEL_MARKER_LAYER_ID],
       })[0];
       const mmsi = vesselFeature?.properties?.mmsi;
       if (typeof mmsi === 'string') {
-        handleVesselPress(mmsi);
+        handleVesselPress(mmsi, point, coordinates);
         return;
       }
       const markerFeature = map.queryRenderedFeatures(event.point, {
@@ -619,7 +667,7 @@ export default function BaseMap({
       })[0];
       const markerId = markerFeature?.properties?.id;
       if (typeof markerId === 'string') {
-        handleMarkerPress(markerId);
+        handleMarkerPress(markerId, point, coordinates);
         return;
       }
       const fairwayFeature = map.queryRenderedFeatures(event.point, {
@@ -627,7 +675,7 @@ export default function BaseMap({
       })[0];
       const fairwayId = fairwayFeature?.properties?.id;
       if (typeof fairwayId === 'string') {
-        handleFairwayPress(fairwayId);
+        handleFairwayPress(fairwayId, point, coordinates);
         return;
       }
       const bridgeFeature = map.queryRenderedFeatures(event.point, {
@@ -635,13 +683,11 @@ export default function BaseMap({
       })[0];
       const bridgeId = bridgeFeature?.properties?.id;
       if (typeof bridgeId === 'string') {
-        onBridgePressRef.current(bridgeId);
+        handleBridgePress(bridgeId, point, coordinates);
         return;
       }
-      handleDepthPress(
-        { latitude: event.lngLat.lat, longitude: event.lngLat.lng },
-        map.getZoom(),
-      );
+      handleMapPress();
+      handleDepthPress(coordinates, map.getZoom(), point);
     });
     mapRef.current = map;
 
@@ -659,6 +705,10 @@ export default function BaseMap({
     setMapRegion,
     setMapZoom,
   ]);
+
+  useEffect(() => {
+    if (mapRef.current) updateCalloutPoint(mapRef.current);
+  }, [calloutAnchor]);
 
   useEffect(() => {
     (

@@ -3,7 +3,13 @@ import Mapbox, {
   type MapState,
   type SymbolLayerStyle,
 } from '@rnmapbox/maps';
-import { type ComponentRef, useEffect, useRef, useState } from 'react';
+import {
+  type ComponentRef,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { useWindField, windFieldContainsRegion } from '@/hooks';
@@ -156,6 +162,8 @@ export default function BaseMap({
   mapStyle,
   windColorMode,
   networkAvailable,
+  calloutAnchor,
+  onCalloutPointChange,
   onDepthPress,
   vessels,
   vesselsVisible,
@@ -166,6 +174,7 @@ export default function BaseMap({
   markersVisible,
   onFairwayPress,
   onMarkerPress,
+  onMapPress,
   vesselProfile,
   bridges,
   bridgesVisible,
@@ -173,6 +182,9 @@ export default function BaseMap({
 }: BaseMapProps) {
   const cameraRef = useRef<ComponentRef<typeof Mapbox.Camera>>(null);
   const mapViewRef = useRef<ComponentRef<typeof Mapbox.MapView>>(null);
+  const calloutAnchorRef = useRef(calloutAnchor);
+  const onCalloutPointChangeRef = useRef(onCalloutPointChange);
+  const calloutProjectionFrameRef = useRef<number | null>(null);
   const [initialViewport] = useState(
     () => useLocationStore.getState().mapRegion ?? initialRegion,
   );
@@ -195,6 +207,45 @@ export default function BaseMap({
     windAnimationEnabled &&
     (networkAvailable ||
       Boolean(windField && windFieldContainsRegion(windField, windRegion)));
+
+  const scheduleCalloutProjection = useCallback(() => {
+    if (calloutProjectionFrameRef.current !== null) return;
+
+    calloutProjectionFrameRef.current = requestAnimationFrame(() => {
+      calloutProjectionFrameRef.current = null;
+      const anchor = calloutAnchorRef.current;
+
+      if (!anchor) {
+        onCalloutPointChangeRef.current(null);
+        return;
+      }
+
+      void mapViewRef.current
+        ?.getPointInView([anchor.longitude, anchor.latitude])
+        .then((point) => {
+          if (anchor !== calloutAnchorRef.current) return;
+          onCalloutPointChangeRef.current({ x: point[0], y: point[1] });
+        });
+    });
+  }, []);
+
+  useEffect(() => {
+    onCalloutPointChangeRef.current = onCalloutPointChange;
+  }, [onCalloutPointChange]);
+
+  useEffect(() => {
+    calloutAnchorRef.current = calloutAnchor;
+    scheduleCalloutProjection();
+  }, [calloutAnchor, scheduleCalloutProjection]);
+
+  useEffect(
+    () => () => {
+      if (calloutProjectionFrameRef.current !== null) {
+        cancelAnimationFrame(calloutProjectionFrameRef.current);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!mapRegion || restoredRegion.current) {
@@ -246,11 +297,20 @@ export default function BaseMap({
       attributionEnabled
       compassEnabled
       logoEnabled
+      onCameraChanged={scheduleCalloutProjection}
       onMapIdle={handleMapIdle}
       onPress={async (feature) => {
+        const pressPoint = {
+          x: feature.properties.screenPointX,
+          y: feature.properties.screenPointY,
+        };
+        const pressCoordinates = {
+          latitude: feature.geometry.coordinates[1],
+          longitude: feature.geometry.coordinates[0],
+        };
         const vesselFeatures =
           await mapViewRef.current?.queryRenderedFeaturesAtPoint(
-            [feature.properties.screenPointX, feature.properties.screenPointY],
+            [pressPoint.x, pressPoint.y],
             [],
             [
               VESSEL_HIT_LAYER_ID,
@@ -265,7 +325,7 @@ export default function BaseMap({
           );
         const mmsi = vesselFeatures?.features[0]?.properties?.mmsi;
         if (typeof mmsi === 'string') {
-          onVesselPress(mmsi);
+          onVesselPress(mmsi, pressPoint, pressCoordinates);
           return;
         }
         const featureProperties = vesselFeatures?.features[0]?.properties;
@@ -274,7 +334,7 @@ export default function BaseMap({
           typeof markerId === 'string' &&
           typeof featureProperties?.type === 'string'
         ) {
-          onMarkerPress(markerId);
+          onMarkerPress(markerId, pressPoint, pressCoordinates);
           return;
         }
         const fairwayId = featureProperties?.id;
@@ -282,14 +342,15 @@ export default function BaseMap({
           typeof fairwayId === 'string' &&
           featureProperties?.kind === 'bridge'
         ) {
-          onBridgePress(fairwayId);
+          onBridgePress(fairwayId, pressPoint, pressCoordinates);
           return;
         }
         if (typeof fairwayId === 'string') {
-          onFairwayPress(fairwayId);
+          onFairwayPress(fairwayId, pressPoint, pressCoordinates);
           return;
         }
 
+        onMapPress();
         const pressZoom = (await mapViewRef.current?.getZoom()) ?? zoom;
 
         if (
@@ -298,13 +359,7 @@ export default function BaseMap({
           networkAvailable &&
           pressZoom >= MIN_DEPTH_RASTER_ZOOM
         ) {
-          onDepthPress(
-            {
-              latitude: feature.geometry.coordinates[1],
-              longitude: feature.geometry.coordinates[0],
-            },
-            pressZoom,
-          );
+          onDepthPress(pressCoordinates, pressZoom, pressPoint);
         }
       }}
       pitchEnabled={false}

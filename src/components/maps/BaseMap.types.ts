@@ -23,18 +23,46 @@ export interface BaseMapProps {
   mapStyle: MapStyleId;
   windColorMode: WindColorMode;
   networkAvailable: boolean;
-  onDepthPress: (coordinates: Coordinates, zoom: number) => void;
+  calloutAnchor: Coordinates | null;
+  onCalloutPointChange: (point: MapPressPoint | null) => void;
+  onDepthPress: (
+    coordinates: Coordinates,
+    zoom: number,
+    point: MapPressPoint,
+  ) => void;
+  onMapPress: () => void;
   vessels: AISVessel[];
   vesselsVisible: boolean;
-  onVesselPress: (mmsi: string) => void;
+  onVesselPress: (
+    mmsi: string,
+    point: MapPressPoint,
+    coordinates: Coordinates,
+  ) => void;
   fairways: FairwaySegment[];
   fairwaysVisible: boolean;
   markers: NavigationMarker[];
   markersVisible: boolean;
-  onFairwayPress: (id: string) => void;
-  onMarkerPress: (id: string) => void;
+  onFairwayPress: (
+    id: string,
+    point: MapPressPoint,
+    coordinates: Coordinates,
+  ) => void;
+  onMarkerPress: (
+    id: string,
+    point: MapPressPoint,
+    coordinates: Coordinates,
+  ) => void;
   vesselProfile: VesselProfile;
   bridges: BridgeLock[];
   bridgesVisible: boolean;
-  onBridgePress: (id: string) => void;
+  onBridgePress: (
+    id: string,
+    point: MapPressPoint,
+    coordinates: Coordinates,
+  ) => void;
+}
+
+export interface MapPressPoint {
+  x: number;
+  y: number;
 }
