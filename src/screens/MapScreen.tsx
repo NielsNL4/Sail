@@ -44,6 +44,7 @@ import {
   formatDataTimestamp,
   formatTemperature,
   formatWindSpeed,
+  isPhoneLayout,
   isTimestampStale,
   MIN_MARKER_ZOOM,
   shipTypeLabel,
@@ -82,6 +83,8 @@ const depthModes: { id: DepthMode; label: string }[] = [
 export function MapScreen() {
   const insets = useSafeAreaInsets();
   const { height: screenHeight, width: screenWidth } = useWindowDimensions();
+  const phoneLayout = isPhoneLayout(screenWidth);
+  const [layerMenuOpen, setLayerMenuOpen] = useState(false);
   const { isOffline, networkEpoch } = useNetworkStatus();
   const [focusRequestId, setFocusRequestId] = useState(0);
   const depthVisible = useLayersStore((state) => state.visibility.depth);
@@ -243,15 +246,37 @@ export function MapScreen() {
     0,
     screenHeight - layerPanelTop - insets.bottom - 92,
   );
+  const activeLayerCount = [
+    windVisible,
+    depthVisible,
+    vesselsVisible,
+    fairwaysVisible,
+    markersVisible,
+    bridgesVisible,
+  ].filter(Boolean).length;
+
+  useEffect(() => {
+    if (!phoneLayout || !layerMenuOpen || typeof document === 'undefined') {
+      return;
+    }
+
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setLayerMenuOpen(false);
+    };
+    document.addEventListener('keydown', closeOnEscape);
+    return () => document.removeEventListener('keydown', closeOnEscape);
+  }, [layerMenuOpen, phoneLayout]);
 
   return (
     <View style={styles.container}>
       <BaseMap
         depthMode={depthMode}
+        depthVisible={depthVisible}
         focusRequestId={focusRequestId}
         initialRegion={DUTCH_WATERS_REGION}
         location={location}
         locationTitle={locationTitle}
+        mapStyle={mapStyle}
         networkAvailable={!isOffline}
         onDepthPress={inspectDepth}
         onVesselPress={setSelectedVesselMmsi}
@@ -267,417 +292,490 @@ export function MapScreen() {
         bridgesVisible={bridgesVisible}
         onBridgePress={setSelectedBridgeId}
         vesselProfile={vesselProfile}
+        windColorMode={windColorMode}
+        windVisible={windVisible}
       />
 
-      <ScrollView
-        contentContainerStyle={styles.layerPanelContent}
-        showsVerticalScrollIndicator={false}
-        style={[
-          styles.layerPanel,
-          {
-            top: layerPanelTop,
-            width: layerPanelWidth,
-            maxHeight: layerPanelMaxHeight,
-          },
-        ]}
-      >
-        <LayerMenu
-          onToggle={(layer) => {
-            if (layer === 'depth' && depthVisible) {
-              clearDepthInspection();
-            }
-            if (layer === 'vessels' && vesselsVisible) {
-              setSelectedVesselMmsi(null);
-            }
-            if (layer === 'fairway' && fairwaysVisible) {
-              setSelectedFairwayId(null);
-            }
-            if (layer === 'buoys' && markersVisible) {
-              setSelectedMarkerId(null);
-            }
-            if (layer === 'bridgesLocks' && bridgesVisible) {
-              setSelectedBridgeId(null);
-            }
-            toggleLayer(layer);
-          }}
-          visibility={layerVisibility}
+      {phoneLayout && !layerMenuOpen ? (
+        <Pressable
+          accessibilityLabel={strings.openLayerMenu}
+          accessibilityRole="button"
+          onPress={() => setLayerMenuOpen(true)}
+          style={({ pressed }) => [
+            styles.layerMenuTrigger,
+            { top: layerPanelTop },
+            pressed && styles.layerButtonPressed,
+          ]}
+        >
+          <Ionicons color="#f0f9ff" name="layers-outline" size={20} />
+          <Text style={styles.layerMenuTriggerText}>{strings.layerMenu}</Text>
+          <View style={styles.layerCountBadge}>
+            <Text style={styles.layerCountText}>{activeLayerCount}</Text>
+          </View>
+        </Pressable>
+      ) : null}
+
+      {phoneLayout && layerMenuOpen ? (
+        <Pressable
+          accessibilityLabel={strings.closeLayerMenu}
+          accessibilityRole="button"
+          onPress={() => setLayerMenuOpen(false)}
+          style={styles.layerSheetBackdrop}
         />
+      ) : null}
 
-        {vesselsVisible ? (
-          <View style={styles.aisPanel}>
-            <Text style={styles.aisStatus}>
-              {isOffline
-                ? strings.aisOffline
-                : aisStatus === 'connected'
-                  ? strings.aisConnected(vessels.length)
-                  : aisStatus === 'connecting'
-                    ? strings.aisConnecting
-                    : (aisError ?? strings.aisUnavailable)}
-            </Text>
-            {selectedVessel ? (
-              <View style={styles.vesselDetails}>
-                <Text style={styles.vesselName}>
-                  {selectedVessel.name ?? strings.aisVesselUnknown}
-                </Text>
-                <Text style={styles.vesselMeta}>
-                  {strings.aisMmsi(selectedVessel.mmsi)}
-                </Text>
-                <View style={styles.vesselValues}>
-                  {selectedVessel.speedKnots !== null ? (
-                    <Text style={styles.vesselMeta}>
-                      {strings.aisSpeed(
-                        selectedVessel.speedKnots.toFixed(1).replace('.', ','),
-                      )}
-                    </Text>
-                  ) : null}
-                  {selectedVessel.courseDegrees !== null ? (
-                    <Text style={styles.vesselMeta}>
-                      {strings.aisCourse(
-                        Math.round(selectedVessel.courseDegrees).toString(),
-                      )}
-                    </Text>
-                  ) : null}
+      {!phoneLayout || layerMenuOpen ? (
+        <ScrollView
+          accessibilityViewIsModal={phoneLayout}
+          contentContainerStyle={styles.layerPanelContent}
+          showsVerticalScrollIndicator={false}
+          style={[
+            styles.layerPanel,
+            phoneLayout && styles.layerSheet,
+            {
+              top: phoneLayout ? undefined : layerPanelTop,
+              width: phoneLayout ? undefined : layerPanelWidth,
+              maxHeight: phoneLayout
+                ? Math.min(screenHeight * 0.72, screenHeight - insets.top - 24)
+                : layerPanelMaxHeight,
+            },
+          ]}
+        >
+          {phoneLayout ? (
+            <View style={styles.layerSheetHeader}>
+              <View style={styles.layerSheetHandle} />
+              <View style={styles.layerSheetTitleRow}>
+                <View>
+                  <Text style={styles.layerSheetTitle}>
+                    {strings.layerMenu}
+                  </Text>
+                  <Text style={styles.layerSheetSubtitle}>
+                    {activeLayerCount} actief
+                  </Text>
                 </View>
-                {shipTypeLabel(selectedVessel.shipType) ? (
-                  <Text style={styles.vesselMeta}>
-                    {strings.aisType(shipTypeLabel(selectedVessel.shipType)!)}
-                  </Text>
-                ) : null}
-              </View>
-            ) : null}
-          </View>
-        ) : null}
-
-        {fairwaysVisible ? (
-          <View style={styles.navigationPanel}>
-            <Text style={styles.navigationStatus}>
-              {fairwayError ??
-                (fairwaysLoading
-                  ? strings.fairwaysLoading
-                  : fairways.length > 0
-                    ? `${fairways.length} vaarwegsegmenten`
-                    : strings.fairwaysNoData)}
-            </Text>
-            {selectedFairway ? (
-              <View style={styles.navigationDetails}>
-                <Text style={styles.navigationName}>
-                  {selectedFairway.name ?? strings.fairwayUnknown}
-                </Text>
-                <Text style={styles.navigationMeta}>
-                  {selectedFairway.cemtClass === 'unknown'
-                    ? strings.fairwayUnknown
-                    : strings.fairwayClass(selectedFairway.cemtClass)}
-                </Text>
-                {selectedFairway.description ? (
-                  <Text style={styles.navigationMeta}>
-                    {selectedFairway.description}
-                  </Text>
-                ) : null}
-              </View>
-            ) : null}
-          </View>
-        ) : null}
-
-        {markersVisible ? (
-          <View style={styles.navigationPanel}>
-            <Text style={styles.navigationStatus}>
-              {!markersAvailableAtZoom
-                ? strings.markersZoomIn
-                : (markersError ??
-                  (markersLoading
-                    ? strings.markersLoading
-                    : markers.length > 0
-                      ? `${markers.length} boeien en bakens`
-                      : strings.markersNoData))}
-            </Text>
-            {selectedMarker ? (
-              <View style={styles.navigationDetails}>
-                <Text style={styles.navigationName}>
-                  {selectedMarker.name ?? strings.markerUnknown}
-                </Text>
-                <Text style={styles.navigationMeta}>
-                  {strings.markerType(
-                    selectedMarker.type === 'buoy' ? 'boei' : 'baken',
-                  )}
-                </Text>
-                {selectedMarker.number ? (
-                  <Text style={styles.navigationMeta}>
-                    {strings.markerNumber(selectedMarker.number)}
-                  </Text>
-                ) : null}
-                {selectedMarker.waterway ? (
-                  <Text style={styles.navigationMeta}>
-                    {strings.markerWaterway(selectedMarker.waterway)}
-                  </Text>
-                ) : null}
-                {selectedMarker.description ? (
-                  <Text style={styles.navigationMeta}>
-                    {strings.markerDescription(selectedMarker.description)}
-                  </Text>
-                ) : null}
-                {selectedMarker.color ? (
-                  <Text style={styles.navigationMeta}>
-                    {strings.markerColor(selectedMarker.color)}
-                  </Text>
-                ) : null}
-                {selectedMarker.colorPattern ? (
-                  <Text style={styles.navigationMeta}>
-                    {strings.markerColorPattern(selectedMarker.colorPattern)}
-                  </Text>
-                ) : null}
-              </View>
-            ) : null}
-          </View>
-        ) : null}
-
-        {bridgesVisible ? (
-          <View style={styles.navigationPanel}>
-            <Text style={styles.navigationStatus}>
-              {bridgeError ?? `${bridges.length} bruggen in dit kaartgebied`}
-            </Text>
-            {selectedBridge ? (
-              <View style={styles.navigationDetails}>
-                <Text style={styles.navigationName}>{selectedBridge.name}</Text>
-                <Text style={styles.navigationMeta}>
-                  {selectedBridge.liveStatus === 'open'
-                    ? 'Live open'
-                    : 'Live status onbekend'}
-                </Text>
-              </View>
-            ) : null}
-          </View>
-        ) : null}
-
-        <View style={styles.mapStyleSection}>
-          <Text style={styles.mapStyleTitle}>{strings.mapStyle}</Text>
-          <View style={styles.mapStyleButtons}>
-            {mapStyles.map((style) => {
-              const selected = style.id === mapStyle;
-
-              return (
                 <Pressable
-                  accessibilityLabel={`${strings.mapStyle}: ${style.label}`}
+                  accessibilityLabel={strings.closeLayerMenu}
                   accessibilityRole="button"
-                  accessibilityState={{ selected }}
-                  key={style.id}
-                  onPress={() => setMapStyle(style.id)}
+                  hitSlop={4}
+                  onPress={() => setLayerMenuOpen(false)}
                   style={({ pressed }) => [
-                    styles.mapStyleButton,
-                    selected && styles.mapStyleButtonSelected,
+                    styles.layerSheetClose,
                     pressed && styles.layerButtonPressed,
                   ]}
                 >
-                  <Ionicons
-                    color={selected ? '#f0f9ff' : '#0c4a6e'}
-                    name={style.icon}
-                    size={16}
-                  />
-                  <Text
-                    numberOfLines={1}
-                    style={[
-                      styles.mapStyleButtonText,
-                      selected && styles.layerButtonTextSelected,
-                    ]}
-                  >
-                    {style.label}
-                  </Text>
+                  <Ionicons color="#0c4a6e" name="close" size={24} />
                 </Pressable>
-              );
-            })}
-          </View>
-        </View>
-
-        {windVisible ? (
-          <View style={styles.windReadout}>
-            <View style={styles.windColorModes}>
-              {windColorModes.map((mode) => {
-                const selected = mode.id === windColorMode;
-
-                return (
-                  <Pressable
-                    accessibilityLabel={`${strings.windColors}: ${mode.label}`}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected }}
-                    key={mode.id}
-                    onPress={() => setWindColorMode(mode.id)}
-                    style={({ pressed }) => [
-                      styles.windColorModeButton,
-                      selected && styles.windColorModeButtonSelected,
-                      pressed && styles.layerButtonPressed,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.windColorModeText,
-                        selected && styles.windColorModeTextSelected,
-                      ]}
-                    >
-                      {mode.label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-            {isWeatherLoading && !weather ? (
-              <View style={styles.loadingRow}>
-                <ActivityIndicator color="#0c4a6e" size="small" />
-                <Text style={styles.weatherMuted}>
-                  {strings.weatherLoading}
-                </Text>
               </View>
-            ) : weather ? (
-              <>
-                <View style={styles.windValueRow}>
-                  <Text style={styles.windValue}>{windSpeed}</Text>
-                  <Text style={styles.windDirection}>{windDirection}</Text>
-                  {temperature ? (
-                    <Text style={styles.temperature}>{temperature}</Text>
+            </View>
+          ) : null}
+          <LayerMenu
+            compact={phoneLayout}
+            onToggle={(layer) => {
+              if (layer === 'depth' && depthVisible) {
+                clearDepthInspection();
+              }
+              if (layer === 'vessels' && vesselsVisible) {
+                setSelectedVesselMmsi(null);
+              }
+              if (layer === 'fairway' && fairwaysVisible) {
+                setSelectedFairwayId(null);
+              }
+              if (layer === 'buoys' && markersVisible) {
+                setSelectedMarkerId(null);
+              }
+              if (layer === 'bridgesLocks' && bridgesVisible) {
+                setSelectedBridgeId(null);
+              }
+              toggleLayer(layer);
+            }}
+            visibility={layerVisibility}
+          />
+
+          {vesselsVisible ? (
+            <View style={styles.aisPanel}>
+              <Text style={styles.aisStatus}>
+                {isOffline
+                  ? strings.aisOffline
+                  : aisStatus === 'connected'
+                    ? strings.aisConnected(vessels.length)
+                    : aisStatus === 'connecting'
+                      ? strings.aisConnecting
+                      : (aisError ?? strings.aisUnavailable)}
+              </Text>
+              {selectedVessel ? (
+                <View style={styles.vesselDetails}>
+                  <Text style={styles.vesselName}>
+                    {selectedVessel.name ?? strings.aisVesselUnknown}
+                  </Text>
+                  <Text style={styles.vesselMeta}>
+                    {strings.aisMmsi(selectedVessel.mmsi)}
+                  </Text>
+                  <View style={styles.vesselValues}>
+                    {selectedVessel.speedKnots !== null ? (
+                      <Text style={styles.vesselMeta}>
+                        {strings.aisSpeed(
+                          selectedVessel.speedKnots
+                            .toFixed(1)
+                            .replace('.', ','),
+                        )}
+                      </Text>
+                    ) : null}
+                    {selectedVessel.courseDegrees !== null ? (
+                      <Text style={styles.vesselMeta}>
+                        {strings.aisCourse(
+                          Math.round(selectedVessel.courseDegrees).toString(),
+                        )}
+                      </Text>
+                    ) : null}
+                  </View>
+                  {shipTypeLabel(selectedVessel.shipType) ? (
+                    <Text style={styles.vesselMeta}>
+                      {strings.aisType(shipTypeLabel(selectedVessel.shipType)!)}
+                    </Text>
                   ) : null}
                 </View>
-                <Pressable
-                  accessibilityRole="link"
-                  onPress={() => Linking.openURL('https://open-meteo.com/')}
-                >
-                  <Text style={styles.weatherSource}>
-                    {strings.weatherSource}
-                  </Text>
-                </Pressable>
-                <Text style={styles.dataTimestamp}>
-                  {strings.updatedAt(formatDataTimestamp(weather.fetchedAt))}
-                </Text>
-                {isOffline ? (
-                  <Text style={styles.offlineStatus}>
-                    {weatherIsStale
-                      ? strings.offlineStoredStaleData
-                      : strings.offlineStoredData}
-                  </Text>
-                ) : weatherIsStale ? (
-                  <Text style={styles.staleStatus}>
-                    {strings.staleWeatherData}
-                  </Text>
-                ) : weather.isCached ? (
-                  <Text style={styles.dataTimestamp}>{strings.cachedData}</Text>
-                ) : null}
-              </>
-            ) : (
-              <Text style={styles.weatherError}>
-                {isOffline
-                  ? strings.weatherOfflineUnavailable
-                  : (weatherError ?? strings.weatherUnavailable)}
-              </Text>
-            )}
-            {!windAnimationAvailable ? (
-              <Text style={styles.windAnimationStatus}>
-                {strings.windZoomIn}
-              </Text>
-            ) : isOffline ? (
-              <Text style={styles.offlineStatus}>
-                {windField
-                  ? windFieldAvailableOffline
-                    ? strings.windFieldOffline
-                    : strings.windFieldOutsideOfflineArea
-                  : strings.windFieldOfflineUnavailable}
-              </Text>
-            ) : isWindFieldLoading && !windField ? (
-              <Text style={styles.windAnimationStatus}>
-                {strings.windFieldLoading}
-              </Text>
-            ) : windFieldError ? (
-              <Text style={styles.windAnimationError}>
-                {windField
-                  ? strings.windFieldStale
-                  : strings.windFieldUnavailable}
-              </Text>
-            ) : null}
-          </View>
-        ) : null}
+              ) : null}
+            </View>
+          ) : null}
 
-        {depthVisible ? (
-          <View style={styles.depthPanel}>
-            <View style={styles.depthModes}>
-              {depthModes.map((mode) => {
-                const selected = mode.id === depthMode;
+          {fairwaysVisible ? (
+            <View style={styles.navigationPanel}>
+              <Text style={styles.navigationStatus}>
+                {fairwayError ??
+                  (fairwaysLoading
+                    ? strings.fairwaysLoading
+                    : fairways.length > 0
+                      ? `${fairways.length} vaarwegsegmenten`
+                      : strings.fairwaysNoData)}
+              </Text>
+              {selectedFairway ? (
+                <View style={styles.navigationDetails}>
+                  <Text style={styles.navigationName}>
+                    {selectedFairway.name ?? strings.fairwayUnknown}
+                  </Text>
+                  <Text style={styles.navigationMeta}>
+                    {selectedFairway.cemtClass === 'unknown'
+                      ? strings.fairwayUnknown
+                      : strings.fairwayClass(selectedFairway.cemtClass)}
+                  </Text>
+                  {selectedFairway.description ? (
+                    <Text style={styles.navigationMeta}>
+                      {selectedFairway.description}
+                    </Text>
+                  ) : null}
+                </View>
+              ) : null}
+            </View>
+          ) : null}
+
+          {markersVisible ? (
+            <View style={styles.navigationPanel}>
+              <Text style={styles.navigationStatus}>
+                {!markersAvailableAtZoom
+                  ? strings.markersZoomIn
+                  : (markersError ??
+                    (markersLoading
+                      ? strings.markersLoading
+                      : markers.length > 0
+                        ? `${markers.length} boeien en bakens`
+                        : strings.markersNoData))}
+              </Text>
+              {selectedMarker ? (
+                <View style={styles.navigationDetails}>
+                  <Text style={styles.navigationName}>
+                    {selectedMarker.name ?? strings.markerUnknown}
+                  </Text>
+                  <Text style={styles.navigationMeta}>
+                    {strings.markerType(
+                      selectedMarker.type === 'buoy' ? 'boei' : 'baken',
+                    )}
+                  </Text>
+                  {selectedMarker.number ? (
+                    <Text style={styles.navigationMeta}>
+                      {strings.markerNumber(selectedMarker.number)}
+                    </Text>
+                  ) : null}
+                  {selectedMarker.waterway ? (
+                    <Text style={styles.navigationMeta}>
+                      {strings.markerWaterway(selectedMarker.waterway)}
+                    </Text>
+                  ) : null}
+                  {selectedMarker.description ? (
+                    <Text style={styles.navigationMeta}>
+                      {strings.markerDescription(selectedMarker.description)}
+                    </Text>
+                  ) : null}
+                  {selectedMarker.color ? (
+                    <Text style={styles.navigationMeta}>
+                      {strings.markerColor(selectedMarker.color)}
+                    </Text>
+                  ) : null}
+                  {selectedMarker.colorPattern ? (
+                    <Text style={styles.navigationMeta}>
+                      {strings.markerColorPattern(selectedMarker.colorPattern)}
+                    </Text>
+                  ) : null}
+                </View>
+              ) : null}
+            </View>
+          ) : null}
+
+          {bridgesVisible ? (
+            <View style={styles.navigationPanel}>
+              <Text style={styles.navigationStatus}>
+                {bridgeError ?? `${bridges.length} bruggen in dit kaartgebied`}
+              </Text>
+              {selectedBridge ? (
+                <View style={styles.navigationDetails}>
+                  <Text style={styles.navigationName}>
+                    {selectedBridge.name}
+                  </Text>
+                  <Text style={styles.navigationMeta}>
+                    {selectedBridge.liveStatus === 'open'
+                      ? 'Live open'
+                      : 'Live status onbekend'}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+          ) : null}
+
+          <View style={styles.mapStyleSection}>
+            <Text style={styles.mapStyleTitle}>{strings.mapStyle}</Text>
+            <View
+              style={[
+                styles.mapStyleButtons,
+                phoneLayout && styles.mapStyleButtonsPhone,
+              ]}
+            >
+              {mapStyles.map((style) => {
+                const selected = style.id === mapStyle;
 
                 return (
                   <Pressable
-                    accessibilityLabel={`${strings.depthMode}: ${mode.label}`}
+                    accessibilityLabel={`${strings.mapStyle}: ${style.label}`}
                     accessibilityRole="button"
                     accessibilityState={{ selected }}
-                    key={mode.id}
-                    onPress={() => {
-                      clearDepthInspection();
-                      setDepthMode(mode.id);
-                    }}
+                    key={style.id}
+                    onPress={() => setMapStyle(style.id)}
                     style={({ pressed }) => [
-                      styles.depthModeButton,
-                      selected && styles.depthModeButtonSelected,
+                      styles.mapStyleButton,
+                      phoneLayout && styles.mapStyleButtonPhone,
+                      selected && styles.mapStyleButtonSelected,
                       pressed && styles.layerButtonPressed,
                     ]}
                   >
+                    <Ionicons
+                      color={selected ? '#f0f9ff' : '#0c4a6e'}
+                      name={style.icon}
+                      size={16}
+                    />
                     <Text
+                      numberOfLines={1}
                       style={[
-                        styles.depthModeText,
-                        selected && styles.depthModeTextSelected,
+                        styles.mapStyleButtonText,
+                        selected && styles.layerButtonTextSelected,
                       ]}
                     >
-                      {mode.label}
+                      {style.label}
                     </Text>
                   </Pressable>
                 );
               })}
             </View>
-            <Text style={styles.depthSource}>
-              {depthMode === 'enc'
-                ? strings.depthSourceEnc
-                : strings.depthSourceBathymetry}
-            </Text>
-            {effectiveMapZoom < 8 ? (
-              <Text style={styles.depthStatus}>{strings.depthZoomIn}</Text>
-            ) : null}
-            {isOffline ? (
-              <Text style={styles.offlineStatus}>{strings.depthOffline}</Text>
-            ) : depthMode === 'bathymetry' && isInspecting ? (
-              <View style={styles.loadingRow}>
-                <ActivityIndicator color="#0c4a6e" size="small" />
-                <Text style={styles.depthStatus}>
-                  {strings.depthInspecting}
-                </Text>
-              </View>
-            ) : depthMode === 'bathymetry' && selectedSample ? (
-              <>
-                <Text style={styles.selectedDepth}>
-                  {strings.depthSelected(
-                    selectedSample.bottomElevationMetersNap
-                      .toFixed(1)
-                      .replace('.', ','),
-                  )}
-                </Text>
-                <Text style={styles.selectedDepthPosition}>
-                  {strings.depthSelectedPosition(
-                    selectedSample.coordinates.latitude,
-                    selectedSample.coordinates.longitude,
-                  )}
-                </Text>
-              </>
-            ) : depthMode === 'bathymetry' && inspectionError ? (
-              <Text style={styles.depthError}>{inspectionError}</Text>
-            ) : depthMode === 'bathymetry' && effectiveMapZoom >= 8 ? (
-              <Text style={styles.depthStatus}>{strings.depthTapHint}</Text>
-            ) : null}
-            <Text style={styles.bathymetryNotice}>
-              {depthMode === 'enc'
-                ? strings.encNotice
-                : strings.bathymetryNotice}
-            </Text>
           </View>
-        ) : null}
-      </ScrollView>
+
+          {windVisible ? (
+            <View style={styles.windReadout}>
+              <View style={styles.windColorModes}>
+                {windColorModes.map((mode) => {
+                  const selected = mode.id === windColorMode;
+
+                  return (
+                    <Pressable
+                      accessibilityLabel={`${strings.windColors}: ${mode.label}`}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected }}
+                      key={mode.id}
+                      onPress={() => setWindColorMode(mode.id)}
+                      style={({ pressed }) => [
+                        styles.windColorModeButton,
+                        selected && styles.windColorModeButtonSelected,
+                        pressed && styles.layerButtonPressed,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.windColorModeText,
+                          selected && styles.windColorModeTextSelected,
+                        ]}
+                      >
+                        {mode.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+              {isWeatherLoading && !weather ? (
+                <View style={styles.loadingRow}>
+                  <ActivityIndicator color="#0c4a6e" size="small" />
+                  <Text style={styles.weatherMuted}>
+                    {strings.weatherLoading}
+                  </Text>
+                </View>
+              ) : weather ? (
+                <>
+                  <View style={styles.windValueRow}>
+                    <Text style={styles.windValue}>{windSpeed}</Text>
+                    <Text style={styles.windDirection}>{windDirection}</Text>
+                    {temperature ? (
+                      <Text style={styles.temperature}>{temperature}</Text>
+                    ) : null}
+                  </View>
+                  <Pressable
+                    accessibilityRole="link"
+                    onPress={() => Linking.openURL('https://open-meteo.com/')}
+                  >
+                    <Text style={styles.weatherSource}>
+                      {strings.weatherSource}
+                    </Text>
+                  </Pressable>
+                  <Text style={styles.dataTimestamp}>
+                    {strings.updatedAt(formatDataTimestamp(weather.fetchedAt))}
+                  </Text>
+                  {isOffline ? (
+                    <Text style={styles.offlineStatus}>
+                      {weatherIsStale
+                        ? strings.offlineStoredStaleData
+                        : strings.offlineStoredData}
+                    </Text>
+                  ) : weatherIsStale ? (
+                    <Text style={styles.staleStatus}>
+                      {strings.staleWeatherData}
+                    </Text>
+                  ) : weather.isCached ? (
+                    <Text style={styles.dataTimestamp}>
+                      {strings.cachedData}
+                    </Text>
+                  ) : null}
+                </>
+              ) : (
+                <Text style={styles.weatherError}>
+                  {isOffline
+                    ? strings.weatherOfflineUnavailable
+                    : (weatherError ?? strings.weatherUnavailable)}
+                </Text>
+              )}
+              {!windAnimationAvailable ? (
+                <Text style={styles.windAnimationStatus}>
+                  {strings.windZoomIn}
+                </Text>
+              ) : isOffline ? (
+                <Text style={styles.offlineStatus}>
+                  {windField
+                    ? windFieldAvailableOffline
+                      ? strings.windFieldOffline
+                      : strings.windFieldOutsideOfflineArea
+                    : strings.windFieldOfflineUnavailable}
+                </Text>
+              ) : isWindFieldLoading && !windField ? (
+                <Text style={styles.windAnimationStatus}>
+                  {strings.windFieldLoading}
+                </Text>
+              ) : windFieldError ? (
+                <Text style={styles.windAnimationError}>
+                  {windField
+                    ? strings.windFieldStale
+                    : strings.windFieldUnavailable}
+                </Text>
+              ) : null}
+            </View>
+          ) : null}
+
+          {depthVisible ? (
+            <View style={styles.depthPanel}>
+              <View style={styles.depthModes}>
+                {depthModes.map((mode) => {
+                  const selected = mode.id === depthMode;
+
+                  return (
+                    <Pressable
+                      accessibilityLabel={`${strings.depthMode}: ${mode.label}`}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected }}
+                      key={mode.id}
+                      onPress={() => {
+                        clearDepthInspection();
+                        setDepthMode(mode.id);
+                      }}
+                      style={({ pressed }) => [
+                        styles.depthModeButton,
+                        selected && styles.depthModeButtonSelected,
+                        pressed && styles.layerButtonPressed,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.depthModeText,
+                          selected && styles.depthModeTextSelected,
+                        ]}
+                      >
+                        {mode.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+              <Text style={styles.depthSource}>
+                {depthMode === 'enc'
+                  ? strings.depthSourceEnc
+                  : strings.depthSourceBathymetry}
+              </Text>
+              {effectiveMapZoom < 8 ? (
+                <Text style={styles.depthStatus}>{strings.depthZoomIn}</Text>
+              ) : null}
+              {isOffline ? (
+                <Text style={styles.offlineStatus}>{strings.depthOffline}</Text>
+              ) : depthMode === 'bathymetry' && isInspecting ? (
+                <View style={styles.loadingRow}>
+                  <ActivityIndicator color="#0c4a6e" size="small" />
+                  <Text style={styles.depthStatus}>
+                    {strings.depthInspecting}
+                  </Text>
+                </View>
+              ) : depthMode === 'bathymetry' && selectedSample ? (
+                <>
+                  <Text style={styles.selectedDepth}>
+                    {strings.depthSelected(
+                      selectedSample.bottomElevationMetersNap
+                        .toFixed(1)
+                        .replace('.', ','),
+                    )}
+                  </Text>
+                  <Text style={styles.selectedDepthPosition}>
+                    {strings.depthSelectedPosition(
+                      selectedSample.coordinates.latitude,
+                      selectedSample.coordinates.longitude,
+                    )}
+                  </Text>
+                </>
+              ) : depthMode === 'bathymetry' && inspectionError ? (
+                <Text style={styles.depthError}>{inspectionError}</Text>
+              ) : depthMode === 'bathymetry' && effectiveMapZoom >= 8 ? (
+                <Text style={styles.depthStatus}>{strings.depthTapHint}</Text>
+              ) : null}
+              <Text style={styles.bathymetryNotice}>
+                {depthMode === 'enc'
+                  ? strings.encNotice
+                  : strings.bathymetryNotice}
+              </Text>
+            </View>
+          ) : null}
+        </ScrollView>
+      ) : null}
 
       {isMocked ? (
-        <View
-          pointerEvents="none"
-          style={[styles.mockBadge, { top: insets.top + 14 }]}
-        >
+        <View style={[styles.mockBadge, { top: insets.top + 14 }]}>
           <Text style={styles.mockBadgeText}>
             {strings.developmentLocation}
           </Text>
@@ -685,10 +783,7 @@ export function MapScreen() {
       ) : null}
 
       {statusMessage ? (
-        <View
-          pointerEvents="none"
-          style={[styles.statusCard, { bottom: insets.bottom + 90 }]}
-        >
+        <View style={[styles.statusCard, { bottom: insets.bottom + 90 }]}>
           <Text style={styles.statusText}>{statusMessage}</Text>
         </View>
       ) : null}
@@ -700,6 +795,7 @@ export function MapScreen() {
         onPress={handleLocatePress}
         style={({ pressed }) => [
           styles.locationButton,
+          phoneLayout && styles.locationButtonPhone,
           { bottom: insets.bottom + 24 },
           pressed && styles.locationButtonPressed,
           isTracking && styles.locationButtonDisabled,
@@ -729,10 +825,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     borderRadius: 12,
     backgroundColor: '#fbbf24',
-    shadowColor: '#422006',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 5,
+    pointerEvents: 'none',
+    boxShadow: '0 2px 5px rgba(66, 32, 6, 0.2)',
     elevation: 4,
   },
   layerPanel: {
@@ -743,11 +837,101 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(186, 230, 253, 0.9)',
     borderRadius: 16,
     backgroundColor: 'rgba(240, 249, 255, 0.95)',
-    shadowColor: '#082f49',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.2,
-    shadowRadius: 7,
+    boxShadow: '0 3px 7px rgba(8, 47, 73, 0.2)',
     elevation: 5,
+  },
+  layerSheet: {
+    bottom: 0,
+    left: 0,
+    right: 0,
+    zIndex: 1200,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+    borderColor: '#bae6fd',
+    backgroundColor: '#f0f9ff',
+    boxShadow: '0 -4px 12px rgba(8, 47, 73, 0.24)',
+  },
+  layerSheetBackdrop: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    zIndex: 1100,
+    backgroundColor: 'rgba(8, 47, 73, 0.34)',
+  },
+  layerSheetHeader: {
+    paddingHorizontal: 16,
+    paddingBottom: 4,
+  },
+  layerSheetHandle: {
+    width: 36,
+    height: 4,
+    alignSelf: 'center',
+    marginBottom: 10,
+    marginTop: 7,
+    borderRadius: 2,
+    backgroundColor: '#94a3b8',
+  },
+  layerSheetTitleRow: {
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  layerSheetTitle: {
+    color: '#082f49',
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  layerSheetSubtitle: {
+    marginTop: 1,
+    color: '#64748b',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  layerSheetClose: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 22,
+    backgroundColor: '#e0f2fe',
+  },
+  layerMenuTrigger: {
+    position: 'absolute',
+    left: 12,
+    zIndex: 1000,
+    minWidth: 116,
+    height: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    backgroundColor: '#075985',
+    boxShadow: '0 2px 6px rgba(8, 47, 73, 0.24)',
+    elevation: 5,
+  },
+  layerMenuTriggerText: {
+    color: '#f0f9ff',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  layerCountBadge: {
+    minWidth: 20,
+    height: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 5,
+    borderRadius: 10,
+    backgroundColor: '#e0f2fe',
+  },
+  layerCountText: {
+    color: '#075985',
+    fontSize: 11,
+    fontWeight: '800',
   },
   layerPanelContent: {
     overflow: 'hidden',
@@ -841,6 +1025,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 5,
   },
+  mapStyleButtonsPhone: {
+    flexWrap: 'wrap',
+    gap: 8,
+  },
   mapStyleButton: {
     minWidth: 0,
     minHeight: 42,
@@ -854,6 +1042,10 @@ const styles = StyleSheet.create({
   },
   mapStyleButtonSelected: {
     backgroundColor: '#0369a1',
+  },
+  mapStyleButtonPhone: {
+    minHeight: 48,
+    flexBasis: '47%',
   },
   mapStyleButtonText: {
     color: '#0c4a6e',
@@ -1054,6 +1246,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 14,
     backgroundColor: 'rgba(8, 47, 73, 0.92)',
+    pointerEvents: 'none',
   },
   statusText: {
     color: '#f0f9ff',
@@ -1070,10 +1263,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 18,
     backgroundColor: '#0369a1',
-    shadowColor: '#082f49',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
+    boxShadow: '0 3px 6px rgba(8, 47, 73, 0.3)',
     elevation: 6,
   },
   locationButtonPressed: {
@@ -1082,5 +1272,11 @@ const styles = StyleSheet.create({
   },
   locationButtonDisabled: {
     opacity: 0.7,
+  },
+  locationButtonPhone: {
+    right: 12,
+    width: 48,
+    height: 48,
+    borderRadius: 14,
   },
 });

@@ -6,8 +6,10 @@ import type {
   DepthMode,
   LocationData,
   MapRegion,
+  MapStyleId,
   NavigationMarker,
   VesselProfile,
+  WindColorMode,
 } from '@/types';
 
 export interface BaseMapProps {
@@ -16,6 +18,10 @@ export interface BaseMapProps {
   focusRequestId: number;
   locationTitle: string;
   depthMode: DepthMode;
+  depthVisible: boolean;
+  windVisible: boolean;
+  mapStyle: MapStyleId;
+  windColorMode: WindColorMode;
   networkAvailable: boolean;
   onDepthPress: (coordinates: Coordinates, zoom: number) => void;
   vessels: AISVessel[];

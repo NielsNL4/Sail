@@ -1,36 +1,55 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { StatusBar } from 'expo-status-bar';
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import {
+  ActivityIndicator,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
 import { MapScreen, SettingsScreen } from '@/screens';
+import { usePersistedStoresReady } from '@/hooks';
 
 type Tab = 'map' | 'settings';
 
 export default function App() {
   const [tab, setTab] = useState<Tab>('map');
+  const storesReady = usePersistedStoresReady();
 
   return (
     <SafeAreaProvider>
       <View style={styles.app}>
-        <View style={styles.screen}>
-          {tab === 'map' ? <MapScreen /> : <SettingsScreen />}
-        </View>
-        <View style={styles.tabBar}>
-          <TabButton
-            icon="map-outline"
-            label="Kaart"
-            onPress={() => setTab('map')}
-            selected={tab === 'map'}
-          />
-          <TabButton
-            icon="boat-outline"
-            label="Mijn schip"
-            onPress={() => setTab('settings')}
-            selected={tab === 'settings'}
-          />
-        </View>
+        {!storesReady ? (
+          <View style={styles.loading}>
+            <ActivityIndicator color="#0e7490" size="large" />
+            <Text style={styles.loadingText}>Instellingen laden...</Text>
+          </View>
+        ) : (
+          <>
+            <View style={styles.screen}>
+              {tab === 'map' ? <MapScreen /> : <SettingsScreen />}
+            </View>
+            <SafeAreaView edges={['bottom']} style={styles.tabBarSafeArea}>
+              <View style={styles.tabBar}>
+                <TabButton
+                  icon="map-outline"
+                  label="Kaart"
+                  onPress={() => setTab('map')}
+                  selected={tab === 'map'}
+                />
+                <TabButton
+                  icon="boat-outline"
+                  label="Mijn schip"
+                  onPress={() => setTab('settings')}
+                  selected={tab === 'settings'}
+                />
+              </View>
+            </SafeAreaView>
+          </>
+        )}
       </View>
       <StatusBar style="light" />
     </SafeAreaProvider>
@@ -69,7 +88,10 @@ function TabButton({
 
 const styles = StyleSheet.create({
   app: { backgroundColor: '#f8fafc', flex: 1 },
+  loading: { alignItems: 'center', flex: 1, gap: 12, justifyContent: 'center' },
+  loadingText: { color: '#475569', fontSize: 14, fontWeight: '600' },
   screen: { flex: 1 },
+  tabBarSafeArea: { backgroundColor: '#fff' },
   tabBar: {
     backgroundColor: '#fff',
     borderTopColor: '#e2e8f0',

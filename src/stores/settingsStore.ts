@@ -100,7 +100,7 @@ export const useSettingsStore = create<SettingsState>()(
         vesselDimensionUnits,
       }),
       merge: (persisted, current) => {
-        const saved = persisted as Partial<SettingsState>;
+        const saved = (persisted ?? {}) as Partial<SettingsState>;
         return {
           ...current,
           ...saved,

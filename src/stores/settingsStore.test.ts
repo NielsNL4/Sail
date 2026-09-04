@@ -29,6 +29,12 @@ describe('settingsStore map style persistence', () => {
     expect(useSettingsStore.getState().depthMode).toBe('enc');
   });
 
+  it('hydrates safely when no settings have been stored yet', async () => {
+    await expect(useSettingsStore.persist.rehydrate()).resolves.toBeUndefined();
+
+    expect(useSettingsStore.getState().mapStyle).toBe('modern');
+  });
+
   it('round-trips the selected map style through storage', async () => {
     useSettingsStore.getState().setMapStyle('dark');
     await vi.waitFor(() =>

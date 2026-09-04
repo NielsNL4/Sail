@@ -10,6 +10,8 @@ import type { MapRegion, WindField } from '@/types';
 import { logApiError } from '@/utils';
 
 const WIND_FIELD_CACHE_DURATION_MS = 15 * 60 * 1_000;
+const RATE_LIMIT_BACKOFF_MS = 15 * 60 * 1_000;
+let retryAfter = 0;
 
 function expandRegion(region: MapRegion, zoom: number): MapRegion {
   const minimumDelta = zoom >= 12 ? 0.04 : 0.2;
@@ -91,7 +93,11 @@ export function useWindField(
   }, [enabled]);
 
   useEffect(() => {
-    if (!enabled || (field && fieldCoversRegion(field, region, gridSize))) {
+    if (
+      !enabled ||
+      Date.now() < retryAfter ||
+      (field && fieldCoversRegion(field, region, gridSize))
+    ) {
       return;
     }
 
@@ -103,6 +109,7 @@ export function useWindField(
       .getWindField(expandRegion(region, zoom), controller.signal, gridSize)
       .then((nextField) => {
         if (active) {
+          retryAfter = 0;
           setField(nextField);
         }
       })
@@ -117,6 +124,9 @@ export function useWindField(
         }
 
         logApiError(apiError);
+        if (apiError.status === 429) {
+          retryAfter = Date.now() + RATE_LIMIT_BACKOFF_MS;
+        }
         if (active) {
           setError(apiError);
         }

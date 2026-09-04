@@ -54,6 +54,8 @@ export const strings = {
   aisCourse: (course: string) => `Koers ${course}°`,
   aisType: (shipType: string) => `Type ${shipType}`,
   layerMenu: 'Kaartlagen',
+  openLayerMenu: 'Open kaartlagen',
+  closeLayerMenu: 'Sluit kaartlagen',
   layerComingSoon: 'binnenkort beschikbaar',
   layerSoonShort: 'binnenkort',
   tidesLayer: 'Getijden',

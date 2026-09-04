@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import type { TextStyle } from 'react-native';
@@ -14,7 +15,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useSettingsStore } from '@/stores';
 import type { VesselProfile } from '@/types';
-import { feetToMeters, metersToFeet, vesselProfileIsEmpty } from '@/utils';
+import {
+  feetToMeters,
+  isPhoneLayout,
+  metersToFeet,
+  vesselProfileIsEmpty,
+} from '@/utils';
 
 const fields: {
   key: keyof VesselProfile;
@@ -39,6 +45,8 @@ function formatValue(value: number | null, unit: 'meters' | 'feet'): string {
 
 export function SettingsScreen() {
   const insets = useSafeAreaInsets();
+  const { width: screenWidth } = useWindowDimensions();
+  const phoneLayout = isPhoneLayout(screenWidth);
   const profile = useSettingsStore((state) => state.vesselProfile);
   const setVesselProfile = useSettingsStore((state) => state.setVesselProfile);
   const vesselDimensionUnits = useSettingsStore(
@@ -95,7 +103,11 @@ export function SettingsScreen() {
 
   return (
     <ScrollView
-      contentContainerStyle={[styles.content, { paddingTop: insets.top + 20 }]}
+      contentContainerStyle={[
+        styles.content,
+        phoneLayout && styles.contentPhone,
+        { paddingTop: insets.top + (phoneLayout ? 14 : 20) },
+      ]}
       keyboardShouldPersistTaps="handled"
     >
       <View style={styles.headerBlock}>
@@ -103,20 +115,27 @@ export function SettingsScreen() {
           <Ionicons name="boat-outline" size={18} color="#0e7490" />
           <Text style={styles.eyebrow}>MIJN SCHIP</Text>
         </View>
-        <Text style={styles.title}>Vaar met jouw maten</Text>
-        <Text style={styles.intro}>
+        <Text style={[styles.title, phoneLayout && styles.titlePhone]}>
+          Vaar met jouw maten
+        </Text>
+        <Text style={[styles.intro, phoneLayout && styles.introPhone]}>
           Vul de afmetingen van je schip in. De kaart markeert vaarwegen die op
           basis van CEMT-klasse mogelijk niet passen.
         </Text>
       </View>
 
-      <View style={styles.card}>
+      <View style={[styles.card, phoneLayout && styles.cardPhone]}>
         {fields.map(({ key, label, dimension }) => {
           const unit = dimension ? vesselDimensionUnits[dimension] : 'meters';
           return (
-            <View key={key} style={styles.fieldRow}>
+            <View
+              key={key}
+              style={[styles.fieldRow, phoneLayout && styles.fieldRowPhone]}
+            >
               <Text style={styles.label}>{label}</Text>
-              <View style={styles.inputWrap}>
+              <View
+                style={[styles.inputWrap, phoneLayout && styles.inputWrapPhone]}
+              >
                 <TextInput
                   accessibilityLabel={label}
                   keyboardType="decimal-pad"
@@ -203,6 +222,10 @@ const styles = StyleSheet.create({
     paddingBottom: 36,
     backgroundColor: '#f8fafc',
   },
+  contentPhone: {
+    paddingHorizontal: 16,
+    paddingBottom: 24,
+  },
   headerBlock: { maxWidth: 560, width: '100%' },
   eyebrowRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   eyebrow: {
@@ -212,11 +235,16 @@ const styles = StyleSheet.create({
     letterSpacing: 1.5,
   },
   title: { color: '#082f49', fontSize: 32, fontWeight: '800', marginTop: 10 },
+  titlePhone: { fontSize: 25, lineHeight: 31 },
   intro: {
     color: '#475569',
     fontSize: 16,
     lineHeight: 24,
     marginTop: 10,
+  },
+  introPhone: {
+    fontSize: 14,
+    lineHeight: 21,
   },
   card: {
     backgroundColor: '#fff',
@@ -228,10 +256,21 @@ const styles = StyleSheet.create({
     padding: 18,
     width: '100%',
   },
+  cardPhone: {
+    marginTop: 18,
+    padding: 14,
+  },
   fieldRow: {
     alignItems: 'center',
     flexDirection: 'row',
     minHeight: 62,
+  },
+  fieldRowPhone: {
+    minHeight: 0,
+    alignItems: 'stretch',
+    flexDirection: 'column',
+    gap: 6,
+    paddingVertical: 7,
   },
   label: {
     color: '#334155',
@@ -247,6 +286,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     overflow: 'hidden',
     width: 220,
+  },
+  inputWrapPhone: {
+    minHeight: 48,
+    width: '100%',
   },
   input: {
     backgroundColor: 'transparent',
@@ -271,7 +314,9 @@ const styles = StyleSheet.create({
   fieldUnitButton: {
     alignItems: 'center',
     borderRadius: 6,
-    minWidth: 30,
+    justifyContent: 'center',
+    minHeight: 44,
+    minWidth: 44,
     paddingHorizontal: 5,
     paddingVertical: 5,
   },

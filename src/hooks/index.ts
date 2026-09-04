@@ -5,3 +5,4 @@ export { useWindField, windFieldContainsRegion } from './useWindField';
 export { useDepthInspection } from './useDepthInspection';
 export { useAIS } from './useAIS';
 export { useNavigationData } from './useNavigationData';
+export { usePersistedStoresReady } from './usePersistedStoresReady';

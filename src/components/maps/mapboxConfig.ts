@@ -28,8 +28,12 @@ export const WIND_PARTICLE_LAYER_IDS = [0, 1, 2, 3].map(
 );
 export const BATHYMETRY_ATTRIBUTION =
   'Rijkswaterstaat bathymetrie en Inland ENC (CC0)';
-export const BATHYMETRY_BOUNDS = [2.53, 50.67, 7.28, 55.77];
-export const INLAND_ENC_BOUNDS = [3.133333, 50.757502, 7.216667, 53.6];
+export const BATHYMETRY_BOUNDS: [number, number, number, number] = [
+  2.53, 50.67, 7.28, 55.77,
+];
+export const INLAND_ENC_BOUNDS: [number, number, number, number] = [
+  3.133333, 50.757502, 7.216667, 53.6,
+];
 export const COASTAL_BATHYMETRY_TILE_URL =
   'https://geo.rijkswaterstaat.nl/services/ogc/gdr/bodemhoogte_20mtr/ows?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=bodemhoogte_20mtr&STYLES=&FORMAT=image/png&TRANSPARENT=TRUE&EXCEPTIONS=application/vnd.ogc.se_blank&CRS=EPSG:3857&WIDTH=512&HEIGHT=512&BBOX={bbox-epsg-3857}';
 export const INLAND_BATHYMETRY_TILE_URL =

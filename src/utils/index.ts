@@ -19,3 +19,4 @@ export { logApiError } from './logger';
 export { regionToAISBoundingBox, shipTypeLabel } from './vessels';
 export { feetToMeters, metersToFeet } from './vesselUnits';
 export { fairwayIsUnsuitable, vesselProfileIsEmpty } from './vesselSuitability';
+export { isPhoneLayout, PHONE_LAYOUT_MAX_WIDTH } from './responsive';

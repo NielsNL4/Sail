@@ -56,7 +56,7 @@ export const useLayersStore = create<LayersState>()(
       storage: createJSONStorage(() => AsyncStorage),
       partialize: ({ visibility }) => ({ visibility }),
       merge: (persisted, current) => {
-        const saved = persisted as Partial<LayersState>;
+        const saved = (persisted ?? {}) as Partial<LayersState>;
         return {
           ...current,
           ...saved,

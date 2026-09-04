@@ -8,7 +8,7 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { useWindField, windFieldContainsRegion } from '@/hooks';
 import { strings } from '@/i18n';
-import { useLayersStore, useLocationStore, useSettingsStore } from '@/stores';
+import { useLocationStore } from '@/stores';
 import type { MapRegion, MapStyleId, WindColorMode, WindField } from '@/types';
 import { DEFAULT_MAP_ZOOM } from '@/utils';
 
@@ -151,6 +151,10 @@ export default function BaseMap({
   focusRequestId,
   locationTitle,
   depthMode,
+  depthVisible,
+  windVisible,
+  mapStyle,
+  windColorMode,
   networkAvailable,
   onDepthPress,
   vessels,
@@ -180,10 +184,6 @@ export default function BaseMap({
   const mapRegion = useLocationStore((state) => state.mapRegion);
   const setMapRegion = useLocationStore((state) => state.setMapRegion);
   const setMapZoom = useLocationStore((state) => state.setMapZoom);
-  const depthVisible = useLayersStore((state) => state.visibility.depth);
-  const windVisible = useLayersStore((state) => state.visibility.wind);
-  const mapStyle = useSettingsStore((state) => state.mapStyle);
-  const windColorMode = useSettingsStore((state) => state.windColorMode);
   const windRegion = mapRegion ?? initialRegion;
   const windAnimationEnabled = windVisible && shouldRenderWindParticles(zoom);
   const { field: windField } = useWindField(

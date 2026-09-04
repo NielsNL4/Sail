@@ -7,6 +7,7 @@ import type { LayerId } from '@/stores';
 interface LayerMenuProps {
   visibility: Record<LayerId, boolean>;
   onToggle: (layer: LayerId) => void;
+  compact?: boolean;
 }
 
 interface LayerDefinition {
@@ -74,12 +75,23 @@ const layers: LayerDefinition[] = [
   },
 ];
 
-export function LayerMenu({ visibility, onToggle }: LayerMenuProps) {
+export function LayerMenu({
+  visibility,
+  onToggle,
+  compact = false,
+}: LayerMenuProps) {
+  const visibleLayers = compact
+    ? layers.filter((layer) => layer.available)
+    : layers;
+
   return (
-    <View accessibilityLabel={strings.layerMenu} style={styles.container}>
-      <Text style={styles.title}>{strings.layerMenu}</Text>
-      <View style={styles.grid}>
-        {layers.map((layer) => {
+    <View
+      accessibilityLabel={strings.layerMenu}
+      style={[styles.container, compact && styles.containerCompact]}
+    >
+      {!compact ? <Text style={styles.title}>{strings.layerMenu}</Text> : null}
+      <View style={[styles.grid, compact && styles.gridCompact]}>
+        {visibleLayers.map((layer) => {
           const selected = layer.available && visibility[layer.id];
 
           return (
@@ -98,6 +110,7 @@ export function LayerMenu({ visibility, onToggle }: LayerMenuProps) {
               onPress={() => onToggle(layer.id)}
               style={({ pressed }) => [
                 styles.button,
+                compact && styles.buttonCompact,
                 selected && styles.buttonSelected,
                 !layer.available && styles.buttonDisabled,
                 pressed && styles.buttonPressed,
@@ -134,6 +147,11 @@ const styles = StyleSheet.create({
   container: {
     padding: 8,
   },
+  containerCompact: {
+    paddingHorizontal: 12,
+    paddingBottom: 10,
+    paddingTop: 4,
+  },
   title: {
     paddingHorizontal: 4,
     paddingBottom: 6,
@@ -147,6 +165,9 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 6,
   },
+  gridCompact: {
+    gap: 8,
+  },
   button: {
     minWidth: 0,
     minHeight: 56,
@@ -159,6 +180,11 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 10,
     backgroundColor: '#e0f2fe',
+  },
+  buttonCompact: {
+    minHeight: 48,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
   },
   buttonSelected: {
     backgroundColor: '#0369a1',

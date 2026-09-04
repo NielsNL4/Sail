@@ -37,6 +37,12 @@ describe('layersStore', () => {
     });
   });
 
+  it('hydrates safely when no settings have been stored yet', async () => {
+    await expect(useLayersStore.persist.rehydrate()).resolves.toBeUndefined();
+
+    expect(useLayersStore.getState().visibility.wind).toBe(true);
+  });
+
   it('toggles and persists a layer visibility setting', async () => {
     useLayersStore.getState().toggleLayer('depth');
     await vi.waitFor(() => expect(storedValues.has('sail-layers')).toBe(true));
