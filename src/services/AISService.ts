@@ -23,6 +23,11 @@ interface WebSocketLike {
 
 type WebSocketFactory = (url: string) => WebSocketLike;
 
+interface BrowserLocation {
+  hostname: string;
+  protocol: string;
+}
+
 export interface AISService {
   connect: (boundingBox: AISBoundingBox) => void;
   disconnect: () => void;
@@ -38,6 +43,37 @@ interface StaticVesselData {
 
 const RECONNECT_BASE_MS = 1_000;
 const RECONNECT_MAX_MS = 30_000;
+
+export function resolveAISRelayUrl(
+  configuredUrl = process.env.EXPO_PUBLIC_AIS_RELAY_URL,
+  browserLocation: BrowserLocation | undefined =
+    typeof window === 'undefined' ? undefined : window.location,
+): string | undefined {
+  if (!configuredUrl || !browserLocation) {
+    return configuredUrl;
+  }
+
+  try {
+    const relayUrl = new URL(configuredUrl);
+    const relayUsesLoopback = ['localhost', '127.0.0.1', '::1'].includes(
+      relayUrl.hostname,
+    );
+    const pageUsesLoopback = ['localhost', '127.0.0.1', '::1'].includes(
+      browserLocation.hostname,
+    );
+
+    if (relayUsesLoopback && !pageUsesLoopback) {
+      relayUrl.hostname = browserLocation.hostname;
+    }
+    if (browserLocation.protocol === 'https:' && relayUrl.protocol === 'ws:') {
+      relayUrl.protocol = 'wss:';
+    }
+
+    return relayUrl.toString();
+  } catch {
+    return configuredUrl;
+  }
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -193,7 +229,7 @@ async function messageDataToText(data: unknown): Promise<string | null> {
 }
 
 export function createAISService(
-  relayUrl = process.env.EXPO_PUBLIC_AIS_RELAY_URL,
+  relayUrl = resolveAISRelayUrl(),
   socketFactory?: WebSocketFactory,
 ): AISService {
   let socket: WebSocketLike | null = null;

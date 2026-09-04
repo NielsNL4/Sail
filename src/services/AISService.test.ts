@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { createAISService, normalizeAISMessage } from './AISService';
+import {
+  createAISService,
+  normalizeAISMessage,
+  resolveAISRelayUrl,
+} from './AISService';
 
 const positionReport = {
   MessageType: 'PositionReport',
@@ -20,6 +24,24 @@ const positionReport = {
 };
 
 describe('AISService', () => {
+  it('uses the web page host for a loopback relay on physical devices', () => {
+    expect(
+      resolveAISRelayUrl('ws://localhost:8790', {
+        hostname: '88.198.0.177',
+        protocol: 'http:',
+      }),
+    ).toBe('ws://88.198.0.177:8790/');
+  });
+
+  it('uses a secure WebSocket when the web page uses HTTPS', () => {
+    expect(
+      resolveAISRelayUrl('ws://localhost:8790', {
+        hostname: 'sail.example.com',
+        protocol: 'https:',
+      }),
+    ).toBe('wss://sail.example.com:8790/');
+  });
+
   it('normalizes position reports and AIS unavailable values', () => {
     expect(
       normalizeAISMessage(positionReport, null, '2026-09-04T12:00:00.000Z'),
