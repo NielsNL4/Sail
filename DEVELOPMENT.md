@@ -94,6 +94,11 @@ is not required for the current local development workflow.
   GetFeatureInfo request against the resolution shown at the current zoom and
   reports bottom elevation in metres relative to NAP. Point inspection is not
   available in ENC mode to avoid mixing NAP measurements with chart-datum data.
+- The map controls are exposed through a dedicated layer menu. Wind and depth
+  are active overlays; tides, waypoints, and weather warnings are visible as
+  disabled placeholders until their data overlays are implemented. The menu
+  uses a two-column phone layout, caps its width on tablets, and scrolls on
+  short screens so controls do not overlap.
 
 Bathymetry is historic measured bottom elevation, not live navigable depth. It
 must not be used without current water level, chart datum, vessel draft, and

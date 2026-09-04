@@ -4,14 +4,17 @@ import {
   ActivityIndicator,
   Linking,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
   BaseMap,
+  LayerMenu,
   regionToZoom,
   shouldRenderWindParticles,
 } from '@/components/maps';
@@ -30,13 +33,6 @@ import {
   formatTemperature,
   formatWindSpeed,
 } from '@/utils';
-
-interface LayerButtonProps {
-  icon: React.ComponentProps<typeof Ionicons>['name'];
-  label: string;
-  selected: boolean;
-  onPress: () => void;
-}
 
 const mapStyles: {
   id: MapStyleId;
@@ -67,41 +63,13 @@ const depthModes: { id: DepthMode; label: string }[] = [
   { id: 'bathymetry', label: strings.depthModeBathymetry },
 ];
 
-function LayerButton({ icon, label, selected, onPress }: LayerButtonProps) {
-  return (
-    <Pressable
-      accessibilityLabel={label}
-      accessibilityRole="button"
-      accessibilityState={{ selected }}
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.layerButton,
-        selected && styles.layerButtonSelected,
-        pressed && styles.layerButtonPressed,
-      ]}
-    >
-      <Ionicons
-        color={selected ? '#f0f9ff' : '#0c4a6e'}
-        name={icon}
-        size={18}
-      />
-      <Text
-        style={[
-          styles.layerButtonText,
-          selected && styles.layerButtonTextSelected,
-        ]}
-      >
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
-
 export function MapScreen() {
   const insets = useSafeAreaInsets();
+  const { height: screenHeight, width: screenWidth } = useWindowDimensions();
   const [focusRequestId, setFocusRequestId] = useState(0);
   const depthVisible = useLayersStore((state) => state.visibility.depth);
   const windVisible = useLayersStore((state) => state.visibility.wind);
+  const layerVisibility = useLayersStore((state) => state.visibility);
   const toggleLayer = useLayersStore((state) => state.toggleLayer);
   const windSpeedUnit = useSettingsStore((state) => state.windSpeedUnit);
   const temperatureUnit = useSettingsStore((state) => state.temperatureUnit);
@@ -168,6 +136,12 @@ export function MapScreen() {
       : permissionStatus === 'undetermined'
         ? strings.locationRationale
         : null;
+  const layerPanelTop = insets.top + (isMocked ? 68 : 14);
+  const layerPanelWidth = Math.min(380, screenWidth - 28);
+  const layerPanelMaxHeight = Math.max(
+    240,
+    screenHeight - layerPanelTop - insets.bottom - 92,
+  );
 
   return (
     <View style={styles.container}>
@@ -180,28 +154,27 @@ export function MapScreen() {
         onDepthPress={inspectDepth}
       />
 
-      <View
-        style={[styles.layerPanel, { top: insets.top + (isMocked ? 68 : 14) }]}
+      <ScrollView
+        contentContainerStyle={styles.layerPanelContent}
+        showsVerticalScrollIndicator={false}
+        style={[
+          styles.layerPanel,
+          {
+            top: layerPanelTop,
+            width: layerPanelWidth,
+            maxHeight: layerPanelMaxHeight,
+          },
+        ]}
       >
-        <View style={styles.layerButtons}>
-          <LayerButton
-            icon="water-outline"
-            label={strings.bathymetryLayer}
-            onPress={() => {
-              if (depthVisible) {
-                clearDepthInspection();
-              }
-              toggleLayer('depth');
-            }}
-            selected={depthVisible}
-          />
-          <LayerButton
-            icon="navigate-outline"
-            label={strings.windLayer}
-            onPress={() => toggleLayer('wind')}
-            selected={windVisible}
-          />
-        </View>
+        <LayerMenu
+          onToggle={(layer) => {
+            if (layer === 'depth' && depthVisible) {
+              clearDepthInspection();
+            }
+            toggleLayer(layer);
+          }}
+          visibility={layerVisibility}
+        />
 
         <View style={styles.mapStyleSection}>
           <Text style={styles.mapStyleTitle}>{strings.mapStyle}</Text>
@@ -399,7 +372,7 @@ export function MapScreen() {
             </Text>
           </View>
         ) : null}
-      </View>
+      </ScrollView>
 
       {isMocked ? (
         <View
@@ -467,8 +440,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 14,
     zIndex: 1000,
-    width: 246,
-    overflow: 'hidden',
     borderWidth: 1,
     borderColor: 'rgba(186, 230, 253, 0.9)',
     borderRadius: 16,
@@ -479,23 +450,9 @@ const styles = StyleSheet.create({
     shadowRadius: 7,
     elevation: 5,
   },
-  layerButtons: {
-    flexDirection: 'row',
-    gap: 8,
-    padding: 8,
-  },
-  layerButton: {
-    minHeight: 38,
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    borderRadius: 10,
-    backgroundColor: '#e0f2fe',
-  },
-  layerButtonSelected: {
-    backgroundColor: '#0369a1',
+  layerPanelContent: {
+    overflow: 'hidden',
+    borderRadius: 15,
   },
   layerButtonPressed: {
     opacity: 0.76,

@@ -2,10 +2,10 @@
 
 ## Current Status
 
-- Active phase: Phase G — Depth Layer (selectable nautical implementation; awaiting review)
+- Active phase: Phase H — Layer Menu (implemented; awaiting review)
 - Phase F — Wind Animation is complete.
 - Mapbox Studio nautical basemap styling is deferred until the developer is ready.
-- Do not advance to Phase H until Phase G is implemented, tested, and reviewed.
+- Phase G is implemented, tested, and reviewed; do not advance to Phase I until Phase H is implemented, tested, and reviewed.
 
 ### Phase G Verification
 
@@ -15,7 +15,7 @@
 - WMS rasters use matching 512 px requests and source tiles with no raster fade, reducing requests and preventing stale parent imagery from overlapping a replacement layer.
 - Automatic viewport sampling, generated NAP sounding labels, and the persisted depth viewport cache have been removed. In bathymetry mode, tapping the visible layer makes one non-retried `GetFeatureInfo` request against the dataset shown at the current zoom.
 - First launch and location focus use Mapbox zoom 13. Returning sessions continue to restore the operator's last viewport; Garmin documents manual chart scale and speed-based look-ahead but no fixed idle or startup chart scale.
-- All 58 unit tests, TypeScript, and ESLint pass. Prettier, the production web export, and visual review remain pending.
+- All 58 unit tests, TypeScript, ESLint, Prettier, and the production web export pass. Native visual rendering remains unverified on Linux.
 - ENC capabilities were verified through an alternate fetch path, including layer `2`, transparent PNG, EPSG:3857, and published bounds. The same path verified that the live 1 m WMS currently ends at February 2026; later catalog metadata is not yet present in the service. WMS raster requests use blank-image exceptions so service errors are not decoded as map images. Direct live tiles and numeric sampling could not be verified from the development host because the official Rijkswaterstaat GeoWeb endpoints timed out. Native visual rendering remains unverified on this Linux development host.
 
 ## Authoritative Phases
@@ -63,6 +63,14 @@ Implement the colored depth-zone overlay with numeric labels and legend.
 ### Phase H — Layer Menu
 
 Build the toggleable layer menu UI connecting to layersStore, wiring each overlay's visibility to its toggle.
+
+Phase H implementation:
+
+- The map panel now uses a dedicated `LayerMenu` component.
+- The menu fills the available phone width up to a 380 px tablet cap, uses two-column touch targets with wrapping labels, and scrolls within the available screen height.
+- Wind and depth remain functional and persist through `layersStore`.
+- Tides, waypoints, and weather warnings are presented as disabled Dutch placeholders until their overlays are implemented.
+- All 61 unit tests, TypeScript, ESLint, Prettier, and the production web export pass. Visual review remains pending.
 
 ### Phase I — Offline & Polish
 
