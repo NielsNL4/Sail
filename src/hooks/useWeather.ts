@@ -4,7 +4,7 @@ import { strings } from '@/i18n';
 import { normalizeApiError, weatherService } from '@/services';
 import { useWeatherStore } from '@/stores';
 import type { Coordinates } from '@/types';
-import { logApiError, WEATHER_FRESHNESS_MS } from '@/utils';
+import { isTimestampStale, logApiError, WEATHER_FRESHNESS_MS } from '@/utils';
 
 const WEATHER_RETRY_DELAY_MS = 60 * 1_000;
 
@@ -13,12 +13,13 @@ function isFreshForCoordinates(
   fetchedAt: string,
   weatherCoordinates: Coordinates,
 ) {
-  const age = Date.now() - new Date(fetchedAt).getTime();
   const nearRequestedPoint =
     Math.abs(coordinates.latitude - weatherCoordinates.latitude) < 0.1 &&
     Math.abs(coordinates.longitude - weatherCoordinates.longitude) < 0.1;
 
-  return age < WEATHER_FRESHNESS_MS && nearRequestedPoint;
+  return (
+    !isTimestampStale(fetchedAt, WEATHER_FRESHNESS_MS) && nearRequestedPoint
+  );
 }
 
 export function useWeather(
@@ -28,21 +29,46 @@ export function useWeather(
 ) {
   const [refreshTick, setRefreshTick] = useState(0);
   const weather = useWeatherStore((state) => state.weather);
+  const storedRequestCoordinates = useWeatherStore(
+    (state) => state.requestCoordinates,
+  );
   const isLoading = useWeatherStore((state) => state.isLoading);
   const error = useWeatherStore((state) => state.error);
   const setWeather = useWeatherStore((state) => state.setWeather);
+  const setRequestCoordinates = useWeatherStore(
+    (state) => state.setRequestCoordinates,
+  );
   const setLoading = useWeatherStore((state) => state.setLoading);
   const setError = useWeatherStore((state) => state.setError);
+  const requestAnchor =
+    storedRequestCoordinates ?? weather?.current.coordinates ?? null;
+  const requestAnchorIsNear = Boolean(
+    requestAnchor &&
+    Math.abs(requestAnchor.latitude - coordinates.latitude) < 0.075 &&
+    Math.abs(requestAnchor.longitude - coordinates.longitude) < 0.075,
+  );
+  const requestLatitude =
+    requestAnchorIsNear && requestAnchor
+      ? requestAnchor.latitude
+      : Math.round(coordinates.latitude * 20) / 20;
+  const requestLongitude =
+    requestAnchorIsNear && requestAnchor
+      ? requestAnchor.longitude
+      : Math.round(coordinates.longitude * 20) / 20;
 
   useEffect(() => {
     if (!enabled) {
       return;
     }
+    const requestCoordinates = {
+      latitude: requestLatitude,
+      longitude: requestLongitude,
+    };
 
     if (
       weather &&
       isFreshForCoordinates(
-        coordinates,
+        requestCoordinates,
         weather.fetchedAt,
         weather.current.coordinates,
       )
@@ -63,11 +89,12 @@ export function useWeather(
     const controller = new AbortController();
     let active = true;
     let retryTimeout: ReturnType<typeof setTimeout> | undefined;
+    setRequestCoordinates(requestCoordinates);
     setError(null);
     setLoading(true);
 
     weatherService
-      .getWeather(coordinates, controller.signal)
+      .getWeather(requestCoordinates, controller.signal)
       .then((nextWeather) => {
         if (active) {
           setWeather(nextWeather);
@@ -98,12 +125,14 @@ export function useWeather(
       setLoading(false);
     };
   }, [
-    coordinates,
     enabled,
     networkAvailable,
+    requestLatitude,
+    requestLongitude,
     refreshTick,
     setError,
     setLoading,
+    setRequestCoordinates,
     setWeather,
     weather,
   ]);

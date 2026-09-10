@@ -1,5 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Linking,
@@ -21,6 +21,7 @@ import {
   regionToZoom,
   shouldRenderWindParticles,
 } from '@/components/maps';
+import { InstrumentPanel, NavigationHud } from '@/components/navigation';
 import {
   useDepthInspection,
   useAIS,
@@ -30,6 +31,7 @@ import {
   useWeather,
   windFieldContainsRegion,
 } from '@/hooks';
+import type { NavigationController } from '@/hooks';
 import { strings } from '@/i18n';
 import {
   useLayersStore,
@@ -45,9 +47,14 @@ import type {
   Coordinates,
   DepthMode,
   MapStyleId,
+  NavigationOverlay,
+  SailingGuidance,
+  SailingOverlay,
   WindColorMode,
 } from '@/types';
 import {
+  calculateSailingGuidance,
+  createSailingOverlay,
   directionToCompass,
   DUTCH_WATERS_REGION,
   formatDataTimestamp,
@@ -91,7 +98,7 @@ const depthModes: { id: DepthMode; label: string }[] = [
 
 type ActiveMapSelection = {
   coordinates: Coordinates;
-  kind: 'vessel' | 'fairway' | 'marker' | 'bridge' | 'depth';
+  kind: 'vessel' | 'fairway' | 'marker' | 'bridge' | 'depth' | 'destination';
   point: MapPressPoint;
 };
 
@@ -101,13 +108,23 @@ interface CalloutContent {
   label: string;
   rows: CalloutRow[];
   title: string;
+  primaryAction?: {
+    label: string;
+    onPress: () => void;
+  };
 }
 
-export function MapScreen() {
+interface MapScreenProps {
+  navigation: NavigationController;
+}
+
+export function MapScreen({ navigation }: MapScreenProps) {
   const insets = useSafeAreaInsets();
   const { height: screenHeight, width: screenWidth } = useWindowDimensions();
   const phoneLayout = isPhoneLayout(screenWidth);
   const [layerMenuOpen, setLayerMenuOpen] = useState(false);
+  const [destinationSelectionActive, setDestinationSelectionActive] =
+    useState(false);
   const { isOffline, networkEpoch } = useNetworkStatus();
   const [focusRequestId, setFocusRequestId] = useState(0);
   const depthVisible = useLayersStore((state) => state.visibility.depth);
@@ -128,6 +145,7 @@ export function MapScreen() {
   const setWindColorMode = useSettingsStore((state) => state.setWindColorMode);
   const depthMode = useSettingsStore((state) => state.depthMode);
   const vesselProfile = useSettingsStore((state) => state.vesselProfile);
+  const sailingProfile = useSettingsStore((state) => state.sailingProfile);
   const setDepthMode = useSettingsStore((state) => state.setDepthMode);
   const mapRegion = useLocationStore((state) => state.mapRegion);
   const mapZoom = useLocationStore((state) => state.mapZoom);
@@ -157,8 +175,8 @@ export function MapScreen() {
   const {
     location,
     permissionStatus,
-    isTracking,
-    isMocked,
+    isLocating,
+    isDevelopmentLocation,
     error,
     requestLocation,
   } = useLocation();
@@ -167,7 +185,11 @@ export function MapScreen() {
     weather,
     isLoading: isWeatherLoading,
     error: weatherError,
-  } = useWeather(weatherCoordinates, windVisible, !isOffline);
+  } = useWeather(
+    weatherCoordinates,
+    windVisible || Boolean(navigation.session),
+    !isOffline,
+  );
   const windSpeed = weather
     ? formatWindSpeed(weather.current.wind.speedMetersPerSecond, windSpeedUnit)
     : null;
@@ -192,6 +214,25 @@ export function MapScreen() {
     ? isTimestampStale(weather.fetchedAt, WEATHER_FRESHNESS_MS) ||
       Boolean(weatherError)
     : false;
+  const sailingGuidance: SailingGuidance | null =
+    navigation.status === 'navigating' && navigation.metrics && weather
+      ? calculateSailingGuidance({
+          navigation: navigation.metrics,
+          profile: sailingProfile,
+          weatherStale: weatherIsStale,
+          wind: weather.current.wind,
+          windFetchedAt: weather.fetchedAt,
+          windValidAt: weather.current.observedAt,
+        })
+      : null;
+  const sailingOverlay: SailingOverlay | null =
+    location && navigation.session && sailingGuidance
+      ? createSailingOverlay(
+          location.coordinates,
+          navigation.session.target.coordinates,
+          sailingGuidance,
+        )
+      : null;
   const activeMapRegion = mapRegion ?? DUTCH_WATERS_REGION;
   useAIS(activeMapRegion, vesselsVisible && !isOffline);
   useEffect(() => {
@@ -229,9 +270,9 @@ export function MapScreen() {
     markersVisible && markersAvailableAtZoom,
     !isOffline,
   );
-  const fairways = Object.values(fairwaysById);
-  const markers = Object.values(markersById);
-  const vessels = Object.values(vesselsByMmsi);
+  const fairways = useMemo(() => Object.values(fairwaysById), [fairwaysById]);
+  const markers = useMemo(() => Object.values(markersById), [markersById]);
+  const vessels = useMemo(() => Object.values(vesselsByMmsi), [vesselsByMmsi]);
   const selectedVessel = selectedVesselMmsi
     ? (vesselsByMmsi[selectedVesselMmsi] ?? null)
     : null;
@@ -247,8 +288,27 @@ export function MapScreen() {
   const windFieldAvailableOffline = Boolean(
     windField && windFieldContainsRegion(windField, activeMapRegion),
   );
+  const navigationOverlay: NavigationOverlay | null = navigation.session
+    ? {
+        currentCoordinates:
+          location &&
+          (!location.isMocked || location.source === 'development') &&
+          navigation.status === 'navigating'
+            ? location.coordinates
+            : null,
+        projectedCoordinates: navigation.metrics?.projectedCoordinates ?? null,
+        routeStartCoordinates: navigation.session.startCoordinates,
+        targetCoordinates: navigation.session.target.coordinates,
+        track: navigation.session.track,
+      }
+    : null;
 
   const handleLocatePress = async () => {
+    if (navigation.session && location) {
+      setFocusRequestId((requestId) => requestId + 1);
+      return;
+    }
+
     const nextLocation = await requestLocation();
 
     if (nextLocation) {
@@ -319,18 +379,39 @@ export function MapScreen() {
     void inspectDepth(coordinates, zoom);
   };
 
-  const locationTitle = isMocked
+  const handleMapPress = (coordinates: Coordinates, point: MapPressPoint) => {
+    if (destinationSelectionActive) {
+      setCalloutClosing(false);
+      setActiveMapSelection({ coordinates, kind: 'destination', point });
+      setDestinationSelectionActive(false);
+      return;
+    }
+
+    setCalloutClosing(true);
+  };
+
+  const locationTitle = isDevelopmentLocation
     ? strings.developmentLocation
     : strings.currentLocation;
-  const statusMessage = error
-    ? error
-    : isMocked
-      ? strings.developmentLocationDetails
-      : permissionStatus === 'undetermined'
-        ? strings.locationRationale
-        : null;
-  const layerPanelTop = insets.top + (isMocked ? 68 : 14);
-  const layerPanelWidth = Math.min(380, screenWidth - 28);
+  const statusMessage = navigation.error
+    ? navigation.error
+    : destinationSelectionActive
+      ? strings.destinationSelectionHint
+      : error
+        ? error
+        : isDevelopmentLocation
+          ? strings.developmentLocationDetails
+          : permissionStatus === 'undetermined'
+            ? strings.locationRationale
+            : null;
+  const instrumentGroupWidth = phoneLayout
+    ? screenWidth - 70
+    : Math.min(420, Math.floor((screenWidth - 86) / 2));
+  const layerPanelTop = insets.top + 14;
+  const layerPanelWidth = Math.min(
+    380,
+    screenWidth - instrumentGroupWidth - 86,
+  );
   const layerPanelMaxHeight = Math.max(
     0,
     screenHeight - layerPanelTop - insets.bottom - 92,
@@ -373,7 +454,9 @@ export function MapScreen() {
           ? `marker-${selectedMarkerId}`
           : activeMapSelection.kind === 'bridge'
             ? `bridge-${selectedBridgeId}`
-            : `depth-${activeMapSelection.coordinates.latitude}-${activeMapSelection.coordinates.longitude}`
+            : activeMapSelection.kind === 'destination'
+              ? `destination-${activeMapSelection.coordinates.latitude}-${activeMapSelection.coordinates.longitude}`
+              : `depth-${activeMapSelection.coordinates.latitude}-${activeMapSelection.coordinates.longitude}`
     : 'none';
   let calloutContent: CalloutContent | null = null;
 
@@ -456,7 +539,7 @@ export function MapScreen() {
         label: 'Status',
         value:
           selectedBridge.liveStatus === 'open'
-            ? 'Live open'
+            ? 'Geplande opening actief'
             : selectedBridge.liveStatus === 'closed'
               ? 'Gesloten'
               : 'Onbekend',
@@ -519,6 +602,34 @@ export function MapScreen() {
       rows,
       title: 'Bodemhoogte t.o.v. NAP',
     };
+  } else if (activeMapSelection?.kind === 'destination') {
+    const destination = activeMapSelection.coordinates;
+    calloutContent = {
+      accentColor: '#f97316',
+      icon: 'navigate-circle-outline',
+      label: strings.destinationCallout,
+      rows: [
+        {
+          label: 'Positie',
+          value: strings.coordinates(
+            destination.latitude,
+            destination.longitude,
+          ),
+        },
+      ],
+      title: strings.mapDestination,
+      primaryAction: {
+        label: strings.startNavigation,
+        onPress: () => {
+          setCalloutClosing(true);
+          void navigation.startNavigation({
+            id: `map-${destination.latitude}-${destination.longitude}`,
+            name: strings.mapDestination,
+            coordinates: destination,
+          });
+        },
+      },
+    };
   }
 
   useEffect(() => {
@@ -537,6 +648,7 @@ export function MapScreen() {
     <View style={styles.container}>
       <BaseMap
         calloutAnchor={calloutAnchor}
+        destinationSelectionActive={destinationSelectionActive}
         depthMode={depthMode}
         depthVisible={depthVisible}
         focusRequestId={focusRequestId}
@@ -545,6 +657,8 @@ export function MapScreen() {
         locationTitle={locationTitle}
         mapStyle={mapStyle}
         networkAvailable={!isOffline}
+        navigationOverlay={navigationOverlay}
+        sailingOverlay={sailingOverlay}
         onCalloutPointChange={(point) => {
           if (!point) return;
           setActiveMapSelection((selection) =>
@@ -552,7 +666,7 @@ export function MapScreen() {
           );
         }}
         onDepthPress={handleDepthPress}
-        onMapPress={() => setCalloutClosing(true)}
+        onMapPress={handleMapPress}
         onVesselPress={handleVesselPress}
         vessels={vessels}
         vesselsVisible={vesselsVisible}
@@ -569,6 +683,26 @@ export function MapScreen() {
         windColorMode={windColorMode}
         windVisible={windVisible}
       />
+
+      <View
+        pointerEvents="box-none"
+        style={[
+          styles.instrumentGroup,
+          { top: insets.top + 14, width: instrumentGroupWidth },
+        ]}
+      >
+        <InstrumentPanel location={location} />
+        {navigation.session ? (
+          <NavigationHud
+            compact={phoneLayout || instrumentGroupWidth < 360}
+            metrics={navigation.metrics}
+            onStop={navigation.stopNavigation}
+            sailingGuidance={sailingGuidance}
+            status={navigation.status}
+            targetName={navigation.session.target.name}
+          />
+        ) : null}
+      </View>
 
       {activeMapSelection &&
       calloutContent &&
@@ -842,8 +976,8 @@ export function MapScreen() {
                   </Text>
                   <Text style={styles.navigationMeta}>
                     {selectedBridge.liveStatus === 'open'
-                      ? 'Live open'
-                      : 'Live status onbekend'}
+                      ? 'Geplande opening actief'
+                      : 'Geen actieve geplande opening'}
                   </Text>
                 </View>
               ) : null}
@@ -1084,14 +1218,6 @@ export function MapScreen() {
         </ScrollView>
       ) : null}
 
-      {isMocked ? (
-        <View style={[styles.mockBadge, { top: insets.top + 14 }]}>
-          <Text style={styles.mockBadgeText}>
-            {strings.developmentLocation}
-          </Text>
-        </View>
-      ) : null}
-
       {statusMessage ? (
         <View style={[styles.statusCard, { bottom: insets.bottom + 90 }]}>
           <Text style={styles.statusText}>{statusMessage}</Text>
@@ -1101,22 +1227,56 @@ export function MapScreen() {
       <Pressable
         accessibilityLabel={strings.requestLocation}
         accessibilityRole="button"
-        disabled={isTracking}
+        disabled={isLocating}
         onPress={handleLocatePress}
         style={({ pressed }) => [
           styles.locationButton,
           phoneLayout && styles.locationButtonPhone,
           { bottom: insets.bottom + 24 },
           pressed && styles.locationButtonPressed,
-          isTracking && styles.locationButtonDisabled,
+          isLocating && styles.locationButtonDisabled,
         ]}
       >
-        {isTracking ? (
+        {isLocating ? (
           <ActivityIndicator color="#ffffff" size="small" />
         ) : (
           <Ionicons color="#ffffff" name="locate" size={27} />
         )}
       </Pressable>
+
+      {!navigation.session ? (
+        <Pressable
+          accessibilityLabel={
+            destinationSelectionActive
+              ? strings.cancelDestinationSelection
+              : strings.chooseDestination
+          }
+          accessibilityRole="button"
+          onPress={() => {
+            setActiveMapSelection(null);
+            setCalloutClosing(false);
+            setDestinationSelectionActive((active) => !active);
+          }}
+          style={({ pressed }) => [
+            styles.destinationButton,
+            phoneLayout && styles.destinationButtonPhone,
+            { bottom: insets.bottom + 24 },
+            destinationSelectionActive && styles.destinationButtonActive,
+            pressed && styles.locationButtonPressed,
+          ]}
+        >
+          <Ionicons
+            color="#ffffff"
+            name={destinationSelectionActive ? 'close' : 'navigate'}
+            size={phoneLayout ? 20 : 22}
+          />
+          <Text style={styles.destinationButtonText}>
+            {destinationSelectionActive
+              ? strings.cancelDestinationSelection
+              : strings.chooseDestination}
+          </Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -1126,18 +1286,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#bae6fd',
   },
-  mockBadge: {
+  instrumentGroup: {
     position: 'absolute',
-    left: 16,
-    zIndex: 1000,
-    minHeight: 40,
-    justifyContent: 'center',
-    paddingHorizontal: 14,
-    borderRadius: 12,
-    backgroundColor: '#fbbf24',
-    pointerEvents: 'none',
-    boxShadow: '0 2px 5px rgba(66, 32, 6, 0.2)',
-    elevation: 4,
+    right: 58,
+    zIndex: 1020,
+    alignItems: 'flex-end',
+    gap: 8,
   },
   layerPanel: {
     position: 'absolute',
@@ -1539,11 +1693,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 15,
   },
-  mockBadgeText: {
-    color: '#422006',
-    fontSize: 14,
-    fontWeight: '800',
-  },
   statusCard: {
     position: 'absolute',
     left: 16,
@@ -1588,5 +1737,34 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 14,
+  },
+  destinationButton: {
+    position: 'absolute',
+    right: 88,
+    zIndex: 1000,
+    minHeight: 58,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    paddingHorizontal: 16,
+    borderRadius: 18,
+    backgroundColor: '#c2410c',
+    boxShadow: '0 3px 6px rgba(8, 47, 73, 0.3)',
+    elevation: 6,
+  },
+  destinationButtonPhone: {
+    right: 70,
+    minHeight: 48,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+  },
+  destinationButtonActive: {
+    backgroundColor: '#7c2d12',
+  },
+  destinationButtonText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '800',
   },
 });

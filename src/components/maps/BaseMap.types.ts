@@ -8,6 +8,8 @@ import type {
   MapRegion,
   MapStyleId,
   NavigationMarker,
+  NavigationOverlay,
+  SailingOverlay,
   VesselProfile,
   WindColorMode,
 } from '@/types';
@@ -23,6 +25,9 @@ export interface BaseMapProps {
   mapStyle: MapStyleId;
   windColorMode: WindColorMode;
   networkAvailable: boolean;
+  navigationOverlay: NavigationOverlay | null;
+  sailingOverlay: SailingOverlay | null;
+  destinationSelectionActive: boolean;
   calloutAnchor: Coordinates | null;
   onCalloutPointChange: (point: MapPressPoint | null) => void;
   onDepthPress: (
@@ -30,7 +35,7 @@ export interface BaseMapProps {
     zoom: number,
     point: MapPressPoint,
   ) => void;
-  onMapPress: () => void;
+  onMapPress: (coordinates: Coordinates, point: MapPressPoint) => void;
   vessels: AISVessel[];
   vesselsVisible: boolean;
   onVesselPress: (

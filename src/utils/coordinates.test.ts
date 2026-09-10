@@ -17,6 +17,16 @@ describe('distanceInNauticalMiles', () => {
 
     expect(distance).toBeCloseTo(60.04, 2);
   });
+
+  it('keeps antipodal distances finite', () => {
+    const distance = distanceInNauticalMiles(
+      { latitude: 0, longitude: 0 },
+      { latitude: 0, longitude: 180 },
+    );
+
+    expect(Number.isFinite(distance)).toBe(true);
+    expect(distance).toBeCloseTo(10_807.28, 1);
+  });
 });
 
 describe('initialBearingDegrees', () => {

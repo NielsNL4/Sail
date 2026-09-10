@@ -4,6 +4,8 @@ export { LayerMenu } from './LayerMenu';
 export { SelectedObjectCallout } from './SelectedObjectCallout';
 export type { CalloutRow } from './SelectedObjectCallout';
 export { getCalloutPosition } from './calloutPosition';
+export { navigationOverlayToGeoJson } from './navigationGuidanceLayer';
+export { sailingOverlayToGeoJson } from './sailingGuidanceLayer';
 export { regionToZoom } from './mapboxConfig';
 export {
   MIN_WIND_PARTICLE_ZOOM,

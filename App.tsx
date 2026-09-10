@@ -10,14 +10,22 @@ import {
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
-import { MapScreen, SettingsScreen } from '@/screens';
-import { usePersistedStoresReady } from '@/hooks';
+import { DeveloperScreen, MapScreen, SettingsScreen } from '@/screens';
+import { useForegroundLocation } from './src/hooks/useLocation';
+import {
+  useDevelopmentLocationSimulation,
+  useNavigationSession,
+  usePersistedStoresReady,
+} from '@/hooks';
 
-type Tab = 'map' | 'settings';
+type Tab = 'map' | 'settings' | 'developer';
 
 export default function App() {
   const [tab, setTab] = useState<Tab>('map');
   const storesReady = usePersistedStoresReady();
+  useForegroundLocation();
+  const navigation = useNavigationSession();
+  useDevelopmentLocationSimulation();
 
   return (
     <SafeAreaProvider>
@@ -30,7 +38,13 @@ export default function App() {
         ) : (
           <>
             <View style={styles.screen}>
-              {tab === 'map' ? <MapScreen /> : <SettingsScreen />}
+              {tab === 'map' ? (
+                <MapScreen navigation={navigation} />
+              ) : tab === 'settings' || !__DEV__ ? (
+                <SettingsScreen />
+              ) : (
+                <DeveloperScreen />
+              )}
             </View>
             <SafeAreaView edges={['bottom']} style={styles.tabBarSafeArea}>
               <View style={styles.tabBar}>
@@ -46,6 +60,14 @@ export default function App() {
                   onPress={() => setTab('settings')}
                   selected={tab === 'settings'}
                 />
+                {__DEV__ ? (
+                  <TabButton
+                    icon="code-slash-outline"
+                    label="Developer"
+                    onPress={() => setTab('developer')}
+                    selected={tab === 'developer'}
+                  />
+                ) : null}
               </View>
             </SafeAreaView>
           </>

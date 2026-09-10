@@ -82,4 +82,26 @@ describe('settingsStore map style persistence', () => {
 
     expect(useSettingsStore.getState().depthMode).toBe('bathymetry');
   });
+
+  it('persists the close-hauled sailing angle', async () => {
+    useSettingsStore
+      .getState()
+      .setSailingProfile({ closeHauledAngleDegrees: 48 });
+    await vi.waitFor(() =>
+      expect(storedValues.has('sail-settings')).toBe(true),
+    );
+    const persistedValue = storedValues.get('sail-settings');
+
+    useSettingsStore
+      .getState()
+      .setSailingProfile({ closeHauledAngleDegrees: 45 });
+    if (persistedValue) {
+      storedValues.set('sail-settings', persistedValue);
+    }
+    await useSettingsStore.persist.rehydrate();
+
+    expect(
+      useSettingsStore.getState().sailingProfile.closeHauledAngleDegrees,
+    ).toBe(48);
+  });
 });

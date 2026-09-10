@@ -1,11 +1,16 @@
 import { useEffect, useState } from 'react';
 
-import { useLayersStore, useSettingsStore } from '@/stores';
+import {
+  useDevelopmentLocationStore,
+  useLayersStore,
+  useSettingsStore,
+} from '@/stores';
 
 function storesHaveHydrated(): boolean {
   return (
     useLayersStore.persist.hasHydrated() &&
-    useSettingsStore.persist.hasHydrated()
+    useSettingsStore.persist.hasHydrated() &&
+    (!__DEV__ || useDevelopmentLocationStore.persist.hasHydrated())
   );
 }
 
@@ -20,6 +25,8 @@ export function usePersistedStoresReady(): boolean {
       useLayersStore.persist.onFinishHydration(updateReady),
       useSettingsStore.persist.onHydrate(markLoading),
       useSettingsStore.persist.onFinishHydration(updateReady),
+      useDevelopmentLocationStore.persist.onHydrate(markLoading),
+      useDevelopmentLocationStore.persist.onFinishHydration(updateReady),
     ];
 
     updateReady();

@@ -27,6 +27,10 @@ interface SelectedObjectCalloutProps {
   label: string;
   onClosed: () => void;
   onDismiss: () => void;
+  primaryAction?: {
+    label: string;
+    onPress: () => void;
+  };
   point: MapPressPoint;
   rows: CalloutRow[];
   safeBottom: number;
@@ -43,6 +47,7 @@ export function SelectedObjectCallout({
   label,
   onClosed,
   onDismiss,
+  primaryAction,
   point,
   rows,
   safeBottom,
@@ -181,6 +186,18 @@ export function SelectedObjectCallout({
             ))}
           </View>
         ) : null}
+        {primaryAction ? (
+          <Pressable
+            accessibilityRole="button"
+            onPress={primaryAction.onPress}
+            style={({ pressed }) => [
+              styles.primaryAction,
+              pressed && styles.primaryActionPressed,
+            ]}
+          >
+            <Text style={styles.primaryActionText}>{primaryAction.label}</Text>
+          </Pressable>
+        ) : null}
       </View>
       {position.above ? (
         <View
@@ -256,6 +273,24 @@ const styles = StyleSheet.create({
   rows: {
     paddingHorizontal: 12,
     paddingBottom: 11,
+  },
+  primaryAction: {
+    minHeight: 42,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginHorizontal: 12,
+    marginBottom: 12,
+    borderRadius: 10,
+    backgroundColor: '#0369a1',
+  },
+  primaryActionPressed: {
+    backgroundColor: '#075985',
+    transform: [{ scale: 0.98 }],
+  },
+  primaryActionText: {
+    color: '#f0f9ff',
+    fontSize: 13,
+    fontWeight: '800',
   },
   row: {
     minHeight: 22,

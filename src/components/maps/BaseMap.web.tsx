@@ -11,9 +11,31 @@ import { strings } from '@/i18n';
 import { useLocationStore } from '@/stores';
 import type { DepthMode, MapStyleId, WindColorMode } from '@/types';
 import { DEFAULT_MAP_ZOOM, isPhoneLayout } from '@/utils';
+import {
+  isOwnLocationVisible,
+  OWN_VESSEL_SOURCE_ID,
+  ownVesselToGeoJson,
+} from '../../utils/ownMotion';
 
 import type { BaseMapProps } from './BaseMap.types';
 import { getOverlayLayerVisibility } from './mapLayerVisibility';
+import {
+  NAVIGATION_ARRIVAL_LAYER_ID,
+  NAVIGATION_GUIDANCE_SOURCE_ID,
+  NAVIGATION_PROJECTION_LAYER_ID,
+  NAVIGATION_ROUTE_LAYER_ID,
+  NAVIGATION_TARGET_LAYER_ID,
+  NAVIGATION_TRACK_LAYER_ID,
+  navigationOverlayToGeoJson,
+} from './navigationGuidanceLayer';
+import {
+  SAILING_GUIDANCE_SOURCE_ID,
+  SAILING_NO_GO_LAYER_ID,
+  SAILING_PORT_LAYER_ID,
+  SAILING_STARBOARD_LAYER_ID,
+  SAILING_TACK_POINT_LAYER_ID,
+  sailingOverlayToGeoJson,
+} from './sailingGuidanceLayer';
 import {
   FAIRWAY_HIT_LAYER_ID,
   FAIRWAY_LAYER_ID,
@@ -302,6 +324,154 @@ function registerOverlaySlots(
       },
     });
   }
+  if (!map.getSource(NAVIGATION_GUIDANCE_SOURCE_ID)) {
+    map.addSource(NAVIGATION_GUIDANCE_SOURCE_ID, {
+      type: 'geojson',
+      data: navigationOverlayToGeoJson(null),
+    });
+  }
+  if (!map.getLayer(NAVIGATION_ARRIVAL_LAYER_ID)) {
+    map.addLayer({
+      id: NAVIGATION_ARRIVAL_LAYER_ID,
+      type: 'fill',
+      source: NAVIGATION_GUIDANCE_SOURCE_ID,
+      filter: ['==', ['get', 'kind'], 'arrival'],
+      paint: {
+        'fill-color': '#f97316',
+        'fill-opacity': 0.14,
+        'fill-outline-color': '#ea580c',
+      },
+    });
+  }
+  if (!map.getLayer(NAVIGATION_ROUTE_LAYER_ID)) {
+    map.addLayer({
+      id: NAVIGATION_ROUTE_LAYER_ID,
+      type: 'line',
+      source: NAVIGATION_GUIDANCE_SOURCE_ID,
+      filter: ['==', ['get', 'kind'], 'route'],
+      layout: { 'line-cap': 'round', 'line-join': 'round' },
+      paint: {
+        'line-color': '#0284c7',
+        'line-dasharray': [2, 2],
+        'line-opacity': 0.82,
+        'line-width': ['interpolate', ['linear'], ['zoom'], 7, 2, 15, 4],
+      },
+    });
+  }
+  if (!map.getLayer(NAVIGATION_TRACK_LAYER_ID)) {
+    map.addLayer({
+      id: NAVIGATION_TRACK_LAYER_ID,
+      type: 'line',
+      source: NAVIGATION_GUIDANCE_SOURCE_ID,
+      filter: ['==', ['get', 'kind'], 'track'],
+      layout: { 'line-cap': 'round', 'line-join': 'round' },
+      paint: {
+        'line-color': '#f8fafc',
+        'line-opacity': 0.9,
+        'line-width': ['interpolate', ['linear'], ['zoom'], 7, 1.5, 15, 3],
+      },
+    });
+  }
+  if (!map.getLayer(NAVIGATION_PROJECTION_LAYER_ID)) {
+    map.addLayer({
+      id: NAVIGATION_PROJECTION_LAYER_ID,
+      type: 'line',
+      source: NAVIGATION_GUIDANCE_SOURCE_ID,
+      filter: ['==', ['get', 'kind'], 'projection'],
+      layout: { 'line-cap': 'round' },
+      paint: {
+        'line-color': '#f97316',
+        'line-dasharray': [1, 1.5],
+        'line-width': ['interpolate', ['linear'], ['zoom'], 7, 2, 15, 4],
+      },
+    });
+  }
+  if (!map.getLayer(NAVIGATION_TARGET_LAYER_ID)) {
+    map.addLayer({
+      id: NAVIGATION_TARGET_LAYER_ID,
+      type: 'circle',
+      source: NAVIGATION_GUIDANCE_SOURCE_ID,
+      filter: ['==', ['get', 'kind'], 'target'],
+      paint: {
+        'circle-color': '#f97316',
+        'circle-radius': 8,
+        'circle-stroke-color': '#fff7ed',
+        'circle-stroke-width': 3,
+      },
+    });
+  }
+  if (!map.getSource(SAILING_GUIDANCE_SOURCE_ID)) {
+    map.addSource(SAILING_GUIDANCE_SOURCE_ID, {
+      type: 'geojson',
+      data: sailingOverlayToGeoJson(null),
+    });
+  }
+  if (!map.getLayer(SAILING_NO_GO_LAYER_ID)) {
+    map.addLayer({
+      id: SAILING_NO_GO_LAYER_ID,
+      type: 'fill',
+      source: SAILING_GUIDANCE_SOURCE_ID,
+      filter: ['==', ['get', 'kind'], 'no-go'],
+      paint: {
+        'fill-color': '#dc2626',
+        'fill-opacity': 0.12,
+        'fill-outline-color': '#ef4444',
+      },
+    });
+  }
+  if (!map.getLayer(SAILING_PORT_LAYER_ID)) {
+    map.addLayer({
+      id: SAILING_PORT_LAYER_ID,
+      type: 'line',
+      source: SAILING_GUIDANCE_SOURCE_ID,
+      filter: ['==', ['get', 'kind'], 'port'],
+      layout: { 'line-cap': 'round' },
+      paint: {
+        'line-color': '#dc2626',
+        'line-dasharray': [3, 2],
+        'line-opacity': 0.9,
+        'line-width': ['interpolate', ['linear'], ['zoom'], 7, 1.5, 15, 3],
+      },
+    });
+  }
+  if (!map.getLayer(SAILING_STARBOARD_LAYER_ID)) {
+    map.addLayer({
+      id: SAILING_STARBOARD_LAYER_ID,
+      type: 'line',
+      source: SAILING_GUIDANCE_SOURCE_ID,
+      filter: ['==', ['get', 'kind'], 'starboard'],
+      layout: { 'line-cap': 'round' },
+      paint: {
+        'line-color': '#16a34a',
+        'line-dasharray': [1, 1.5],
+        'line-opacity': 0.9,
+        'line-width': ['interpolate', ['linear'], ['zoom'], 7, 1.5, 15, 3],
+      },
+    });
+  }
+  if (!map.getLayer(SAILING_TACK_POINT_LAYER_ID)) {
+    map.addLayer({
+      id: SAILING_TACK_POINT_LAYER_ID,
+      type: 'circle',
+      source: SAILING_GUIDANCE_SOURCE_ID,
+      filter: ['==', ['get', 'kind'], 'tack-point'],
+      paint: {
+        'circle-color': '#fbbf24',
+        'circle-radius': 6,
+        'circle-stroke-color': '#78350f',
+        'circle-stroke-width': 2,
+      },
+    });
+  }
+  for (const layerId of [
+    NAVIGATION_ARRIVAL_LAYER_ID,
+    NAVIGATION_ROUTE_LAYER_ID,
+    NAVIGATION_TRACK_LAYER_ID,
+    NAVIGATION_PROJECTION_LAYER_ID,
+    NAVIGATION_TARGET_LAYER_ID,
+  ]) {
+    map.moveLayer(layerId);
+  }
   if (!map.getSource(MARKER_SOURCE_ID)) {
     map.addSource(MARKER_SOURCE_ID, {
       type: 'geojson',
@@ -426,19 +596,30 @@ function syncOverlayVisibility(
       map.setLayoutProperty(layerId, 'visibility', value);
     }
   }
+  // Newly enabled overlays must not cover the own-vessel marker.
+  for (const layerId of [
+    'own-vessel-vector',
+    'own-vessel-halo',
+    'own-vessel-neutral',
+    'own-vessel-direction',
+  ]) {
+    if (map.getLayer(layerId)) map.moveLayer(layerId);
+  }
 }
 
 export default function BaseMap({
   initialRegion,
   location,
   focusRequestId,
-  locationTitle,
   depthMode,
   depthVisible,
   windVisible,
   mapStyle: mapStyleId,
   windColorMode,
   networkAvailable,
+  navigationOverlay,
+  sailingOverlay,
+  destinationSelectionActive,
   calloutAnchor,
   onCalloutPointChange,
   onDepthPress,
@@ -459,7 +640,8 @@ export default function BaseMap({
 }: BaseMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapboxMap | null>(null);
-  const markerRef = useRef<mapboxgl.Marker | null>(null);
+  const consumedFocusRequestRef = useRef(0);
+  const destinationSelectionActiveRef = useRef(destinationSelectionActive);
   const [initialMapStyle] = useState(mapStyleId);
   const loadedMapStyleRef = useRef(initialMapStyle);
   const [styleReady, setStyleReady] = useState(false);
@@ -471,8 +653,7 @@ export default function BaseMap({
   );
   const restoredRegion = useRef(false);
   const mapRegion = useLocationStore((state) => state.mapRegion);
-  const setMapRegion = useLocationStore((state) => state.setMapRegion);
-  const setMapZoom = useLocationStore((state) => state.setMapZoom);
+  const setMapViewport = useLocationStore((state) => state.setMapViewport);
   const windRegion = mapRegion ?? initialRegion;
   const [zoom, setZoom] = useState(initialZoom);
   const windAnimationEnabled = windVisible && shouldRenderWindParticles(zoom);
@@ -537,9 +718,17 @@ export default function BaseMap({
       onBridgePress(id, point, coordinates);
     },
   );
-  const handleMapPress = useEffectEvent(() => {
-    onMapPress();
-  });
+  const handleMapPress = useEffectEvent(
+    (
+      coordinates: { latitude: number; longitude: number },
+      point: { x: number; y: number },
+    ) => {
+      onMapPress(coordinates, point);
+    },
+  );
+  useEffect(() => {
+    destinationSelectionActiveRef.current = destinationSelectionActive;
+  }, [destinationSelectionActive]);
   const updateCalloutPoint = useEffectEvent((map: MapboxMap) => {
     if (!calloutAnchor) {
       onCalloutPointChange(null);
@@ -588,6 +777,79 @@ export default function BaseMap({
     (map.getSource(BRIDGE_SOURCE_ID) as GeoJSONSource | undefined)?.setData(
       bridgesToGeoJson(bridges),
     );
+    (
+      map.getSource(NAVIGATION_GUIDANCE_SOURCE_ID) as GeoJSONSource | undefined
+    )?.setData(navigationOverlayToGeoJson(navigationOverlay));
+    (
+      map.getSource(SAILING_GUIDANCE_SOURCE_ID) as GeoJSONSource | undefined
+    )?.setData(sailingOverlayToGeoJson(sailingOverlay));
+    map.addSource(OWN_VESSEL_SOURCE_ID, {
+      type: 'geojson',
+      data: ownVesselToGeoJson(location),
+    });
+    map.addLayer({
+      id: 'own-vessel-vector',
+      type: 'line',
+      source: OWN_VESSEL_SOURCE_ID,
+      filter: ['==', ['get', 'kind'], 'vector'],
+      layout: { 'line-cap': 'round' },
+      paint: {
+        'line-color': ['get', 'color'],
+        'line-width': 2.5,
+        'line-dasharray': [3, 2],
+      },
+    });
+    map.addLayer({
+      id: 'own-vessel-halo',
+      type: 'circle',
+      source: OWN_VESSEL_SOURCE_ID,
+      filter: ['==', ['get', 'kind'], 'position'],
+      paint: {
+        'circle-color': ['get', 'color'],
+        'circle-radius': 16,
+        'circle-opacity': 0.2,
+      },
+    });
+    map.addLayer({
+      id: 'own-vessel-neutral',
+      type: 'circle',
+      source: OWN_VESSEL_SOURCE_ID,
+      filter: [
+        'all',
+        ['==', ['get', 'kind'], 'position'],
+        ['==', ['get', 'directional'], false],
+      ],
+      paint: {
+        'circle-color': ['get', 'color'],
+        'circle-radius': 7,
+        'circle-stroke-color': '#ffffff',
+        'circle-stroke-width': 3,
+      },
+    });
+    map.addLayer({
+      id: 'own-vessel-direction',
+      type: 'symbol',
+      source: OWN_VESSEL_SOURCE_ID,
+      filter: [
+        'all',
+        ['==', ['get', 'kind'], 'position'],
+        ['==', ['get', 'directional'], true],
+      ],
+      layout: {
+        'text-field': '▲',
+        'text-size': 26,
+        'text-allow-overlap': true,
+        'text-ignore-placement': true,
+        'text-rotation-alignment': 'map',
+        'text-pitch-alignment': 'map',
+        'text-rotate': ['get', 'rotation'],
+      },
+      paint: {
+        'text-color': ['get', 'color'],
+        'text-halo-color': '#ffffff',
+        'text-halo-width': 2,
+      },
+    });
     setStyleReady(true);
   });
 
@@ -639,13 +901,13 @@ export default function BaseMap({
       if (!bounds) return;
 
       setZoom(nextZoom);
-      setMapZoom(nextZoom);
-      setMapRegion(
+      setMapViewport(
         coordinatesToRegion(
           [center.lng, center.lat],
           [bounds.getEast(), bounds.getNorth()],
           [bounds.getWest(), bounds.getSouth()],
         ),
+        nextZoom,
       );
     });
     map.on('click', (event) => {
@@ -654,6 +916,10 @@ export default function BaseMap({
         latitude: event.lngLat.lat,
         longitude: event.lngLat.lng,
       };
+      if (destinationSelectionActiveRef.current) {
+        handleMapPress(coordinates, point);
+        return;
+      }
       const vesselFeature = map.queryRenderedFeatures(event.point, {
         layers: [VESSEL_HIT_LAYER_ID, VESSEL_MARKER_LAYER_ID],
       })[0];
@@ -686,14 +952,12 @@ export default function BaseMap({
         handleBridgePress(bridgeId, point, coordinates);
         return;
       }
-      handleMapPress();
+      handleMapPress(coordinates, point);
       handleDepthPress(coordinates, map.getZoom(), point);
     });
     mapRef.current = map;
 
     return () => {
-      markerRef.current?.remove();
-      markerRef.current = null;
       mapRef.current = null;
       map.remove();
     };
@@ -702,8 +966,7 @@ export default function BaseMap({
     initialRegion,
     initialViewport,
     initialZoom,
-    setMapRegion,
-    setMapZoom,
+    setMapViewport,
   ]);
 
   useEffect(() => {
@@ -733,6 +996,18 @@ export default function BaseMap({
       GeoJSONSource | undefined;
     source?.setData(vesselsToGeoJson(vessels));
   }, [styleReady, vessels]);
+
+  useEffect(() => {
+    const source = mapRef.current?.getSource(NAVIGATION_GUIDANCE_SOURCE_ID) as
+      GeoJSONSource | undefined;
+    source?.setData(navigationOverlayToGeoJson(navigationOverlay));
+  }, [navigationOverlay, styleReady]);
+
+  useEffect(() => {
+    const source = mapRef.current?.getSource(SAILING_GUIDANCE_SOURCE_ID) as
+      GeoJSONSource | undefined;
+    source?.setData(sailingOverlayToGeoJson(sailingOverlay));
+  }, [sailingOverlay, styleReady]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -767,7 +1042,13 @@ export default function BaseMap({
   useEffect(() => {
     const map = mapRef.current;
 
-    if (!location || focusRequestId === 0 || !map) {
+    if (
+      !isOwnLocationVisible(location) ||
+      focusRequestId === 0 ||
+      consumedFocusRequestRef.current === focusRequestId ||
+      !map ||
+      !styleReady
+    ) {
       return;
     }
 
@@ -777,35 +1058,27 @@ export default function BaseMap({
       pitch: 0,
       duration: 600,
     });
-  }, [focusRequestId, location]);
+    consumedFocusRequestRef.current = focusRequestId;
+  }, [focusRequestId, location, styleReady]);
 
   useEffect(() => {
-    markerRef.current?.remove();
-    markerRef.current = null;
-
-    if (!location || !mapRef.current) {
-      return;
-    }
-
-    const markerElement = document.createElement('div');
-    markerElement.setAttribute('aria-label', locationTitle);
-    markerElement.setAttribute('role', 'img');
-    markerElement.style.width = '18px';
-    markerElement.style.height = '18px';
-    markerElement.style.border = '3px solid #ffffff';
-    markerElement.style.borderRadius = '50%';
-    markerElement.style.backgroundColor = location.isMocked
-      ? '#f59e0b'
-      : '#0284c7';
-    markerElement.style.boxShadow = '0 1px 5px rgba(8, 47, 73, 0.45)';
-
-    markerRef.current = new mapboxgl.Marker({ element: markerElement })
-      .setLngLat([
-        location.coordinates.longitude,
-        location.coordinates.latitude,
-      ])
-      .addTo(mapRef.current);
-  }, [location, locationTitle]);
+    if (!styleReady) return;
+    let previous = '';
+    const update = () => {
+      const shape = ownVesselToGeoJson(location);
+      const serialized = JSON.stringify(shape);
+      if (serialized === previous) return;
+      const source = mapRef.current?.getSource(OWN_VESSEL_SOURCE_ID) as
+        GeoJSONSource | undefined;
+      if (source) {
+        source.setData(shape);
+        previous = serialized;
+      }
+    };
+    update();
+    const interval = setInterval(update, 1_000);
+    return () => clearInterval(interval);
+  }, [location, styleReady]);
 
   useEffect(() => {
     const map = mapRef.current;

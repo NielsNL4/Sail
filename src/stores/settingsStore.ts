@@ -5,6 +5,7 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 import type {
   DepthMode,
   MapStyleId,
+  SailingProfile,
   VesselProfile,
   WindColorMode,
 } from '@/types';
@@ -26,6 +27,7 @@ interface SettingsState {
   windColorMode: WindColorMode;
   depthMode: DepthMode;
   vesselProfile: VesselProfile;
+  sailingProfile: SailingProfile;
   vesselDimensionUnits: VesselDimensionUnits;
   setWindSpeedUnit: (unit: WindSpeedUnit) => void;
   setDistanceUnit: (unit: DistanceUnit) => void;
@@ -34,6 +36,7 @@ interface SettingsState {
   setWindColorMode: (windColorMode: WindColorMode) => void;
   setDepthMode: (depthMode: DepthMode) => void;
   setVesselProfile: (vesselProfile: VesselProfile) => void;
+  setSailingProfile: (sailingProfile: SailingProfile) => void;
   setVesselDimensionUnit: (
     dimension: keyof VesselDimensionUnits,
     unit: VesselDimensionUnit,
@@ -54,6 +57,9 @@ const defaultSettings = {
     beamMeters: null,
     lengthMeters: null,
   },
+  sailingProfile: {
+    closeHauledAngleDegrees: 45,
+  },
   vesselDimensionUnits: { beam: 'meters', length: 'meters' } as const,
 };
 
@@ -68,6 +74,7 @@ export const useSettingsStore = create<SettingsState>()(
       setWindColorMode: (windColorMode) => set({ windColorMode }),
       setDepthMode: (depthMode) => set({ depthMode }),
       setVesselProfile: (vesselProfile) => set({ vesselProfile }),
+      setSailingProfile: (sailingProfile) => set({ sailingProfile }),
       setVesselDimensionUnit: (dimension, unit) =>
         set((state) => ({
           vesselDimensionUnits: {
@@ -88,6 +95,7 @@ export const useSettingsStore = create<SettingsState>()(
         windColorMode,
         depthMode,
         vesselProfile,
+        sailingProfile,
         vesselDimensionUnits,
       }) => ({
         windSpeedUnit,
@@ -97,6 +105,7 @@ export const useSettingsStore = create<SettingsState>()(
         windColorMode,
         depthMode,
         vesselProfile,
+        sailingProfile,
         vesselDimensionUnits,
       }),
       merge: (persisted, current) => {
@@ -107,6 +116,10 @@ export const useSettingsStore = create<SettingsState>()(
           vesselProfile: {
             ...defaultSettings.vesselProfile,
             ...saved.vesselProfile,
+          },
+          sailingProfile: {
+            ...defaultSettings.sailingProfile,
+            ...saved.sailingProfile,
           },
           vesselDimensionUnits: {
             ...current.vesselDimensionUnits,

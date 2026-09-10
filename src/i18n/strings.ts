@@ -6,10 +6,20 @@ export const strings = {
   requestLocation: 'Bepaal mijn locatie',
   requestingLocation: 'Locatie bepalen...',
   locationUnavailable: 'Je locatie kon niet worden bepaald.',
+  navigationLocationUnavailable:
+    'Navigatie kon niet starten omdat GPS niet beschikbaar is.',
+  navigationMockedLocation:
+    'Navigatie is niet beschikbaar met een gemockte apparaatlocatie.',
+  chooseDestination: 'Kies bestemming',
+  cancelDestinationSelection: 'Annuleer kiezen',
+  destinationSelectionHint: 'Tik op de kaart om een bestemming te kiezen.',
+  destinationCallout: 'Bestemming',
+  mapDestination: 'Kaartbestemming',
+  startNavigation: 'Start navigatie',
   currentLocation: 'Huidige locatie',
   developmentLocation: 'Ontwikkellocatie',
   developmentLocationDetails:
-    'GPS is niet beschikbaar. Er wordt een testpositie op het IJsselmeer gebruikt.',
+    'Er wordt een interne testpositie gebruikt in plaats van apparaat-GPS.',
   coordinates: (latitude: number, longitude: number) =>
     `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`,
   mapTokenMissing:

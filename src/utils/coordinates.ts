@@ -24,8 +24,10 @@ export function distanceInNauticalMiles(
     Math.cos(fromLatitude) *
       Math.cos(toLatitude) *
       Math.sin(longitudeDelta / 2) ** 2;
+  const clampedHaversine = Math.max(0, Math.min(1, haversine));
   const angularDistance =
-    2 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
+    2 *
+    Math.atan2(Math.sqrt(clampedHaversine), Math.sqrt(1 - clampedHaversine));
 
   return EARTH_RADIUS_NAUTICAL_MILES * angularDistance;
 }

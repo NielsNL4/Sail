@@ -142,7 +142,7 @@ export function createBridgeLockService(
           name: `Brug ${bridge.id}`,
           position: bridge.position,
           kind: 'bridge' as const,
-          statusSource: 'live' as const,
+          statusSource: 'scheduled' as const,
           liveStatus: bridge.liveStatus,
           liveStatusUpdatedAt: bridge.liveStatusUpdatedAt,
           scheduledOperatingTimes: null,

@@ -14,13 +14,8 @@ import type { TextStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useSettingsStore } from '@/stores';
-import type { VesselProfile } from '@/types';
-import {
-  feetToMeters,
-  isPhoneLayout,
-  metersToFeet,
-  vesselProfileIsEmpty,
-} from '@/utils';
+import type { SailingProfile, VesselProfile } from '@/types';
+import { feetToMeters, isPhoneLayout, metersToFeet } from '@/utils';
 
 const fields: {
   key: keyof VesselProfile;
@@ -49,6 +44,10 @@ export function SettingsScreen() {
   const phoneLayout = isPhoneLayout(screenWidth);
   const profile = useSettingsStore((state) => state.vesselProfile);
   const setVesselProfile = useSettingsStore((state) => state.setVesselProfile);
+  const sailingProfile = useSettingsStore((state) => state.sailingProfile);
+  const setSailingProfile = useSettingsStore(
+    (state) => state.setSailingProfile,
+  );
   const vesselDimensionUnits = useSettingsStore(
     (state) => state.vesselDimensionUnits,
   );
@@ -56,7 +55,9 @@ export function SettingsScreen() {
     (state) => state.setVesselDimensionUnit,
   );
   const [draft, setDraft] = useState<VesselProfile>(profile);
-  const [saved, setSaved] = useState(false);
+  const [sailingDraft, setSailingDraft] =
+    useState<SailingProfile>(sailingProfile);
+  const [saveStatus, setSaveStatus] = useState<'saved' | 'reset' | null>(null);
 
   const setField = (
     key: keyof VesselProfile,
@@ -73,7 +74,7 @@ export function SettingsScreen() {
           ? feetToMeters(displayedValue)
           : displayedValue;
     setDraft((current) => ({ ...current, [key]: value }));
-    setSaved(false);
+    setSaveStatus(null);
   };
 
   const save = () => {
@@ -81,12 +82,15 @@ export function SettingsScreen() {
     if (
       values.some(
         (value) => value !== null && (!Number.isFinite(value) || value <= 0),
-      )
+      ) ||
+      sailingDraft.closeHauledAngleDegrees < 35 ||
+      sailingDraft.closeHauledAngleDegrees > 60
     ) {
       return;
     }
     setVesselProfile(draft);
-    setSaved(true);
+    setSailingProfile(sailingDraft);
+    setSaveStatus('saved');
   };
 
   const reset = () => {
@@ -98,7 +102,9 @@ export function SettingsScreen() {
     } satisfies VesselProfile;
     setDraft(empty);
     setVesselProfile(empty);
-    setSaved(true);
+    setSailingDraft({ closeHauledAngleDegrees: 45 });
+    setSailingProfile({ closeHauledAngleDegrees: 45 });
+    setSaveStatus('reset');
   };
 
   return (
@@ -181,6 +187,47 @@ export function SettingsScreen() {
         })}
       </View>
 
+      <View style={[styles.card, phoneLayout && styles.cardPhone]}>
+        <View style={styles.cardHeadingRow}>
+          <Ionicons color="#0e7490" name="compass-outline" size={20} />
+          <View style={styles.cardHeadingText}>
+            <Text style={styles.cardTitle}>Zeilgedrag</Text>
+            <Text style={styles.cardDescription}>
+              Hoek tot de forecastwind die je schip aan de wind kan varen.
+            </Text>
+          </View>
+        </View>
+        <View style={[styles.fieldRow, phoneLayout && styles.fieldRowPhone]}>
+          <Text style={styles.label}>Aan-de-windse hoek</Text>
+          <View
+            style={[styles.inputWrap, phoneLayout && styles.inputWrapPhone]}
+          >
+            <TextInput
+              accessibilityLabel="Aan-de-windse hoek"
+              keyboardType="number-pad"
+              onChangeText={(text) => {
+                if (text !== '' && !/^\d{0,2}$/.test(text)) return;
+                setSailingDraft({
+                  closeHauledAngleDegrees: text === '' ? 0 : Number(text),
+                });
+                setSaveStatus(null);
+              }}
+              style={[
+                styles.input,
+                Platform.OS === 'web' ? webInputStyle : undefined,
+              ]}
+              value={
+                sailingDraft.closeHauledAngleDegrees === 0
+                  ? ''
+                  : String(sailingDraft.closeHauledAngleDegrees)
+              }
+            />
+            <Text style={styles.unit}>°</Text>
+          </View>
+        </View>
+        <Text style={styles.fieldHint}>Toegestaan bereik: 35° tot 60°.</Text>
+      </View>
+
       <View style={styles.note}>
         <Ionicons name="information-circle-outline" size={20} color="#0e7490" />
         <Text style={styles.noteText}>
@@ -203,13 +250,11 @@ export function SettingsScreen() {
       >
         <Text style={styles.resetText}>Profiel wissen</Text>
       </Pressable>
-      {saved && (
+      {saveStatus ? (
         <Text style={styles.savedText}>
-          {vesselProfileIsEmpty(draft)
-            ? 'Profiel gewist'
-            : 'Profiel opgeslagen'}
+          {saveStatus === 'reset' ? 'Profiel gewist' : 'Profiel opgeslagen'}
         </Text>
-      )}
+      ) : null}
     </ScrollView>
   );
 }
@@ -260,6 +305,21 @@ const styles = StyleSheet.create({
     marginTop: 18,
     padding: 14,
   },
+  cardHeadingRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    marginBottom: 8,
+  },
+  cardHeadingText: { minWidth: 0, flex: 1 },
+  cardTitle: { color: '#082f49', fontSize: 17, fontWeight: '800' },
+  cardDescription: {
+    marginTop: 2,
+    color: '#64748b',
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  fieldHint: { color: '#64748b', fontSize: 11, lineHeight: 16 },
   fieldRow: {
     alignItems: 'center',
     flexDirection: 'row',

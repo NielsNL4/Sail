@@ -2,6 +2,7 @@ export {
   locationService,
   type LocationResult,
   type LocationService,
+  type LocationWatchResult,
 } from './LocationService';
 export {
   createWeatherService,

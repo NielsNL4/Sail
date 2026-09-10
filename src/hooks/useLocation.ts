@@ -1,42 +1,24 @@
-import { strings } from '@/i18n';
-import { locationService } from '@/services';
+import { useEffect } from 'react';
+import { foregroundLocation } from '../services/foregroundLocation';
 import { useLocationStore } from '@/stores';
+
+export function useForegroundLocation(): void {
+  useEffect(() => foregroundLocation.mount(), []);
+}
 
 export function useLocation() {
   const location = useLocationStore((state) => state.location);
   const permissionStatus = useLocationStore((state) => state.permissionStatus);
-  const isTracking = useLocationStore((state) => state.isTracking);
+  const isLocating = useLocationStore((state) => state.isLocating);
   const error = useLocationStore((state) => state.error);
-  const setLocation = useLocationStore((state) => state.setLocation);
-  const setPermissionStatus = useLocationStore(
-    (state) => state.setPermissionStatus,
-  );
-  const setTracking = useLocationStore((state) => state.setTracking);
-  const setError = useLocationStore((state) => state.setError);
-
-  const requestLocation = async () => {
-    setError(null);
-    setTracking(true);
-
-    try {
-      const result = await locationService.getCurrentLocation();
-      setPermissionStatus(result.permissionStatus);
-      setLocation(result.location);
-      setTracking(false);
-
-      return result.location;
-    } catch {
-      setError(strings.locationUnavailable);
-      return null;
-    }
-  };
 
   return {
     location,
     permissionStatus,
-    isTracking,
+    isLocating,
     isMocked: location?.isMocked ?? false,
+    isDevelopmentLocation: location?.source === 'development',
     error,
-    requestLocation,
+    requestLocation: foregroundLocation.request,
   };
 }

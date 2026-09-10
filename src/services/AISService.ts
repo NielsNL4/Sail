@@ -46,8 +46,9 @@ const RECONNECT_MAX_MS = 30_000;
 
 export function resolveAISRelayUrl(
   configuredUrl = process.env.EXPO_PUBLIC_AIS_RELAY_URL,
-  browserLocation: BrowserLocation | undefined =
-    typeof window === 'undefined' ? undefined : window.location,
+  browserLocation: BrowserLocation | undefined = typeof window === 'undefined'
+    ? undefined
+    : window.location,
 ): string | undefined {
   if (!configuredUrl || !browserLocation) {
     return configuredUrl;

@@ -2,6 +2,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
+import { deduplicateStorage } from './deduplicateStorage';
+
 import type { FairwaySegment, NavigationMarker } from '@/types';
 
 export type NavigationDataset = 'fairways' | 'markers';
@@ -78,7 +80,7 @@ export const useNavigationStore = create<NavigationState>()(
     }),
     {
       name: 'sail-navigation',
-      storage: createJSONStorage(() => AsyncStorage),
+      storage: deduplicateStorage(createJSONStorage(() => AsyncStorage)),
       partialize: ({ fairways, markers, cacheEntries }) => ({
         fairways,
         markers,

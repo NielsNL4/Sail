@@ -45,7 +45,7 @@ module.exports = {
       'expo-location',
       {
         locationWhenInUsePermission:
-          'Sail gebruikt je locatie om je positie op de kaart te tonen.',
+          'Sail gebruikt je locatie om je positie op de kaart te tonen en te volgen tijdens navigatie.',
       },
     ],
     '@rnmapbox/maps',

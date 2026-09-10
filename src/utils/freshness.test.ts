@@ -16,6 +16,14 @@ describe('data freshness', () => {
     expect(formatDataTimestamp('invalid')).toBe('--');
   });
 
+  it('treats implausibly future-dated timestamps as stale', () => {
+    const now = new Date('2026-09-04T10:00:00.000Z').getTime();
+
+    expect(
+      isTimestampStale('2026-09-04T10:06:00.000Z', 15 * 60 * 1_000, now),
+    ).toBe(true);
+  });
+
   it('formats a compact numeric timestamp', () => {
     const formatted = formatDataTimestamp('2026-09-04T10:31:00.000Z');
 

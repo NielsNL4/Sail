@@ -1,4 +1,5 @@
 export const WEATHER_FRESHNESS_MS = 15 * 60 * 1_000;
+export const FUTURE_TIMESTAMP_TOLERANCE_MS = 5 * 60 * 1_000;
 
 export function isTimestampStale(
   timestamp: string,
@@ -6,8 +7,13 @@ export function isTimestampStale(
   now = Date.now(),
 ): boolean {
   const time = new Date(timestamp).getTime();
+  const age = now - time;
 
-  return !Number.isFinite(time) || now - time >= maxAgeMs;
+  return (
+    !Number.isFinite(time) ||
+    age < -FUTURE_TIMESTAMP_TOLERANCE_MS ||
+    age >= maxAgeMs
+  );
 }
 
 export function formatDataTimestamp(timestamp: string): string {
